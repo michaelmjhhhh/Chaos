@@ -1,0 +1,23 @@
+import Foundation
+
+struct AppConfig: Codable, Equatable {
+    var provider: String?
+    var apiKey: String?
+    var model: String?
+    var baseURL: String?
+    var watchDir: String?
+    var outputDir: String?
+    var copyToClipboard: Bool?
+    var language: String?
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case apiKey = "api_key"
+        case model
+        case baseURL = "base_url"
+        case watchDir = "watch_dir"
+        case outputDir = "output_dir"
+        case copyToClipboard = "copy_to_clipboard"
+        case language
+    }
+}
