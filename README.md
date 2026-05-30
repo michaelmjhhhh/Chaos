@@ -48,6 +48,19 @@ Then:
 4. Click **Start Watching** on the dashboard
 5. Take a screenshot — it gets renamed and moved automatically
 
+## Preview Install
+
+The preview build is available through the project Homebrew tap:
+
+```bash
+brew tap michaelmjhhhh/chaos
+brew install --cask chaos
+```
+
+The current preview is distributed for Apple Silicon Macs and is not yet
+Developer ID notarized. macOS may require you to approve the app manually in
+**System Settings → Privacy & Security** after the first launch.
+
 ## Shared Config
 
 Chaos reads and writes its config file at:

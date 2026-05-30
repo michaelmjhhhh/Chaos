@@ -5,6 +5,7 @@ cd "$(dirname "$0")"
 swift build
 
 APP_DIR=".build/Chaos.app/Contents"
+rm -rf ".build/Chaos.app"
 mkdir -p "$APP_DIR/MacOS"
 mkdir -p "$APP_DIR/Resources"
 cp .build/debug/Chaos "$APP_DIR/MacOS/Chaos"
@@ -19,6 +20,8 @@ iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Resources/Chaos.icns"
 if [ -d ".build/debug/Chaos_Chaos.bundle" ]; then
     cp -R .build/debug/Chaos_Chaos.bundle "$APP_DIR/Resources/"
 fi
+
+codesign --force --deep --sign - ".build/Chaos.app"
 
 echo "Built: .build/Chaos.app"
 echo "Run:   open .build/Chaos.app"
