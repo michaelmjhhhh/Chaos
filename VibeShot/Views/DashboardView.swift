@@ -177,6 +177,7 @@ struct DashboardView: View {
         case .error(let m): m
         case .running:
             switch appState.currentStage {
+            case .caught: "Caught a screenshot…"
             case .analyzing: "Analyzing screenshot…"
             case .renaming: "Renaming file…"
             case .clipboard: "Copying to clipboard…"
@@ -204,7 +205,7 @@ struct DashboardView: View {
             switch appState.currentStage {
             case .error: Theme.error
             case .success: Theme.success
-            case .analyzing, .renaming, .clipboard: Theme.ink
+            case .caught, .analyzing, .renaming, .clipboard: Theme.ink
             case .none: Theme.ink
             }
         }

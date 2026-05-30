@@ -1,6 +1,7 @@
 import Foundation
 
 enum ProcessingStage: Equatable {
+    case caught
     case analyzing
     case renaming
     case clipboard
