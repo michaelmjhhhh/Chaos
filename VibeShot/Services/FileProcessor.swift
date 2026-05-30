@@ -1,7 +1,11 @@
 import Foundation
 
 actor FileProcessor {
-    private let apiClient = VisionAPIClient()
+    private let apiClient: VisionAPIClient
+
+    init(apiClient: VisionAPIClient = VisionAPIClient()) {
+        self.apiClient = apiClient
+    }
 
     struct ProcessResult {
         let originalName: String
@@ -16,7 +20,8 @@ actor FileProcessor {
         apiKey: String,
         model: String,
         language: SlugLanguage,
-        copyToClipboard: Bool
+        copyToClipboard: Bool,
+        onStageChange: @Sendable (ProcessingStage) async -> Void = { _ in }
     ) async throws -> ProcessResult {
         let start = Date()
         let originalName = screenshotURL.lastPathComponent
@@ -35,6 +40,7 @@ actor FileProcessor {
         )
         let slug = SlugSanitizer.sanitize(rawSlug)
 
+        await onStageChange(.renaming)
         let destination = try FileRenamer.moveScreenshot(
             from: screenshotURL,
             toDirectory: outputDir,
@@ -42,6 +48,7 @@ actor FileProcessor {
         )
 
         if copyToClipboard {
+            await onStageChange(.clipboard)
             try ClipboardService.copyImage(at: destination)
         }
 

@@ -12,10 +12,14 @@ final class DirectoryWatcher: @unchecked Sendable {
         self.watchURL = directory
     }
 
-    func start(onNewFile: @escaping (URL) -> Void) {
+    @discardableResult
+    func start(onNewFile: @escaping (URL) -> Void) -> Bool {
         self.onNewFile = onNewFile
         fileDescriptor = open(watchURL.path, O_EVTONLY)
-        guard fileDescriptor >= 0 else { return }
+        guard fileDescriptor >= 0 else {
+            self.onNewFile = nil
+            return false
+        }
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fileDescriptor,
@@ -40,6 +44,7 @@ final class DirectoryWatcher: @unchecked Sendable {
         queue.async { [weak self] in
             self?.scanForNewFiles()
         }
+        return true
     }
 
     func stop() {

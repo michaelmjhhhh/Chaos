@@ -1,7 +1,11 @@
 import Foundation
 
 actor VisionAPIClient {
-    private let session = URLSession.shared
+    private let session: URLSession
+
+    init(session: URLSession = .shared) {
+        self.session = session
+    }
 
     func generateSlug(
         imageBase64: String,

@@ -122,11 +122,16 @@ final class AppState {
         watcherStartedAt = Date()
 
         let startedAt = watcherStartedAt!
-        dirWatcher.start { [weak self] url in
+        guard dirWatcher.start(onNewFile: { [weak self] url in
             guard let self else { return }
             Task { @MainActor in
                 await self.handleNewFile(url: url, watcherStartedAt: startedAt)
             }
+        }) else {
+            watcher = nil
+            watcherStartedAt = nil
+            watcherStatus = .error("Could not watch directory: \(resolvedWatchDir)")
+            return
         }
 
         watcherStatus = .running
@@ -173,8 +178,6 @@ final class AppState {
         hourlyThroughput[hourBucket] += 1
 
         do {
-            currentStage = .renaming
-
             let result = try await processor.process(
                 screenshotURL: url,
                 outputDir: URL(fileURLWithPath: resolvedOutputDir),
@@ -183,11 +186,8 @@ final class AppState {
                 model: resolvedModel,
                 language: resolvedLanguage,
                 copyToClipboard: resolvedCopyToClipboard
-            )
-
-            if resolvedCopyToClipboard {
-                currentStage = .clipboard
-                try? await Task.sleep(nanoseconds: 200_000_000)
+            ) { [weak self] stage in
+                await self?.setCurrentStage(stage)
             }
 
             successes += 1
@@ -228,5 +228,9 @@ final class AppState {
             recentFiles.insert(entry, at: 0)
             if recentFiles.count > 50 { recentFiles = Array(recentFiles.prefix(50)) }
         }
+    }
+
+    private func setCurrentStage(_ stage: ProcessingStage) {
+        currentStage = stage
     }
 }
