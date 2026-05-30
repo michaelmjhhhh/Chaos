@@ -1,6 +1,7 @@
 .build/
 dist/
 .swiftpm/
+.worktrees/
 DerivedData/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
