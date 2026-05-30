@@ -15,7 +15,7 @@ struct VibeShotApp: App {
                     }
                 }
         }
-        .defaultSize(width: 700, height: 500)
+        .defaultSize(width: 880, height: 620)
         .windowResizability(.contentMinSize)
         .windowToolbarStyle(.unified)
         .commands {
@@ -24,6 +24,12 @@ struct VibeShotApp: App {
                     Task { await appState.checkAPIHealth() }
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
+            CommandGroup(replacing: .toolbar) {
+                Button("Toggle Start/Stop") {
+                    if appState.isWatching { appState.stop() } else { appState.start() }
+                }
+                .keyboardShortcut(.space, modifiers: [])
             }
         }
 
