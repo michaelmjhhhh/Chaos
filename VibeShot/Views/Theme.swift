@@ -60,6 +60,28 @@ enum Theme {
     // MARK: - Shadows
     static let shadowCard = Color.black.opacity(0.04)
     static let shadowMd = Color.black.opacity(0.06)
+
+    // MARK: - Editorial additions
+
+    static let warmInk = Color(hex: 0x1F1E1B)
+    static let rule = Color(hex: 0xD5CFC4)
+    static let paperTint = Color.black.opacity(0.06)
+
+    // MARK: - Editorial type
+
+    static let displayHero = Font.system(size: 32, weight: .regular, design: .serif)
+    static let serifItalicLg = Font.system(size: 24, weight: .regular, design: .serif).italic()
+    static let serifItalicSm = Font.system(size: 11, weight: .regular, design: .serif).italic()
+    static let smallCapsSm = Font.system(size: 10, weight: .medium)
+
+    // MARK: - Editorial spacing
+
+    static let sMicro: CGFloat = 4
+    static let sSmall: CGFloat = 8
+    static let sMed: CGFloat = 16
+    static let sLg: CGFloat = 24
+    static let sSec: CGFloat = 32
+    static let sBreak: CGFloat = 48
 }
 
 // MARK: - Card modifier with border + subtle shadow
