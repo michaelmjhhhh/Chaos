@@ -32,8 +32,9 @@ struct EmptyColumnDash: View {
     var body: some View {
         Text("—")
             .font(.system(size: 18, design: .serif))
-            .foregroundStyle(Theme.ink.opacity(0.3))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .foregroundStyle(Theme.ink.opacity(0.35))
+            .padding(.top, Theme.sLg)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 

@@ -35,7 +35,8 @@ struct Sparkline: View {
     @ViewBuilder
     private var chart: some View {
         Canvas { ctx, size in
-            guard values.count >= 2 else {
+            let allSame = maxValue == minValue
+            guard values.count >= 2, !allSame else {
                 drawFlat(ctx: ctx, size: size)
                 return
             }
