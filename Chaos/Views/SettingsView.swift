@@ -82,6 +82,21 @@ struct SettingsView: View {
                 Toggle("Copy image to clipboard", isOn: clipboardBinding)
                 Toggle("Start watching on launch", isOn: autoStartBinding)
             }
+
+            Section("Organization") {
+                TextField("Filename Template", text: filenameTemplateBinding,
+                          prompt: Text(NamingPolicy.defaultTemplate).font(Theme.code))
+                    .font(Theme.code)
+                    .textFieldStyle(.roundedBorder)
+                Text("Tokens: {slug}  {date}  {time}")
+                    .font(Theme.codeSm)
+                    .foregroundStyle(Theme.textSoft)
+                Picker("Organize Into", selection: subfolderRuleBinding) {
+                    ForEach(SubfolderRule.allCases) { rule in
+                        Text(rule.displayName).tag(rule)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .onChange(of: appState.config) {
@@ -191,5 +206,17 @@ struct SettingsView: View {
     }
     private var autoStartBinding: Binding<Bool> {
         Binding(get: { appState.autoStart }, set: { appState.autoStart = $0 })
+    }
+    private var filenameTemplateBinding: Binding<String> {
+        Binding(
+            get: { appState.config.filenameTemplate ?? "" },
+            set: { appState.config.filenameTemplate = $0.isEmpty ? nil : $0 }
+        )
+    }
+    private var subfolderRuleBinding: Binding<SubfolderRule> {
+        Binding(
+            get: { SubfolderRule.from(appState.config.subfolderRule) },
+            set: { appState.config.subfolderRule = $0.rawValue }
+        )
     }
 }

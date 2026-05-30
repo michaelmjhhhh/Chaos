@@ -65,6 +65,13 @@ final class AppState {
         config.copyToClipboard ?? false
     }
 
+    var resolvedNamingPolicy: NamingPolicy {
+        NamingPolicy(
+            template: config.filenameTemplate,
+            subfolderRule: SubfolderRule.from(config.subfolderRule)
+        )
+    }
+
     var successRate: Double {
         guard totalProcessed > 0 else { return 0 }
         return Double(successes) / Double(totalProcessed)
@@ -223,7 +230,8 @@ final class AppState {
                 apiKey: config.apiKey ?? "",
                 model: resolvedModel,
                 language: resolvedLanguage,
-                copyToClipboard: resolvedCopyToClipboard
+                copyToClipboard: resolvedCopyToClipboard,
+                namingPolicy: resolvedNamingPolicy
             ) { [weak self] stage in
                 await self?.setCurrentStage(stage)
             }

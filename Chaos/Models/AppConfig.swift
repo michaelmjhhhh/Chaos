@@ -9,6 +9,8 @@ struct AppConfig: Codable, Equatable {
     var outputDir: String?
     var copyToClipboard: Bool?
     var language: String?
+    var filenameTemplate: String?
+    var subfolderRule: String?
 
     enum CodingKeys: String, CodingKey {
         case provider
@@ -19,5 +21,7 @@ struct AppConfig: Codable, Equatable {
         case outputDir = "output_dir"
         case copyToClipboard = "copy_to_clipboard"
         case language
+        case filenameTemplate = "filename_template"
+        case subfolderRule = "subfolder_rule"
     }
 }
