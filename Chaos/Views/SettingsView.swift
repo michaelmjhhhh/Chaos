@@ -6,18 +6,8 @@ struct SettingsView: View {
     @State private var isTesting = false
 
     var body: some View {
-        TabView {
-            Tab("General", systemImage: "gear") { generalTab }
-            Tab("Advanced", systemImage: "slider.horizontal.3") { advancedTab }
-        }
-        .scenePadding()
-        .frame(minWidth: 500, minHeight: 420)
-    }
-
-    @ViewBuilder
-    private var generalTab: some View {
         Form {
-            Section("Provider") {
+            Section("API") {
                 Picker("Provider", selection: providerBinding) {
                     ForEach(Provider.allCases) { p in
                         Text(p.displayName).tag(p)
@@ -32,6 +22,17 @@ struct SettingsView: View {
                           prompt: Text(appState.resolvedProvider.defaultModel).font(Theme.code))
                     .font(Theme.code)
                     .textFieldStyle(.roundedBorder)
+
+                TextField("Base URL", text: baseURLBinding,
+                          prompt: Text(appState.resolvedProvider.defaultBaseURL ?? "https://...").font(Theme.code))
+                    .font(Theme.code)
+                    .textFieldStyle(.roundedBorder)
+
+                if appState.resolvedProvider.requiresBaseURL && (appState.config.baseURL ?? "").isEmpty {
+                    Label("Required for OpenAI-Compatible", systemImage: "exclamationmark.triangle")
+                        .font(Theme.bodySm)
+                        .foregroundStyle(Theme.warning)
+                }
 
                 HStack(spacing: 10) {
                     Button {
@@ -65,25 +66,18 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Language") {
-                Picker("Slug Language", selection: languageBinding) {
+            Section("Directories") {
+                dirPicker("Watch", watchDirBinding)
+                dirPicker("Output", outputDirBinding)
+            }
+
+            Section("Output") {
+                Picker("Language", selection: languageBinding) {
                     ForEach(SlugLanguage.allCases) { l in
                         Text(l.displayName).tag(l)
                     }
                 }
-            }
 
-            Section("Directories") {
-                dirPicker("Watch Directory", watchDirBinding)
-                dirPicker("Output Directory", outputDirBinding)
-            }
-
-            Section("Behavior") {
-                Toggle("Copy image to clipboard", isOn: clipboardBinding)
-                Toggle("Start watching on launch", isOn: autoStartBinding)
-            }
-
-            Section("Organization") {
                 TextField("Filename Template", text: filenameTemplateBinding,
                           prompt: Text(NamingPolicy.defaultTemplate).font(Theme.code))
                     .font(Theme.code)
@@ -91,49 +85,43 @@ struct SettingsView: View {
                 Text("Tokens: {slug}  {date}  {time}")
                     .font(Theme.codeSm)
                     .foregroundStyle(Theme.textSoft)
-                Picker("Organize Into", selection: subfolderRuleBinding) {
+
+                Picker("Subfolders", selection: subfolderRuleBinding) {
                     ForEach(SubfolderRule.allCases) { rule in
                         Text(rule.displayName).tag(rule)
                     }
                 }
             }
+
+            Section("Behavior") {
+                Toggle("Copy image to clipboard", isOn: clipboardBinding)
+                Toggle("Start watching on launch", isOn: autoStartBinding)
+            }
+
+            Section {
+                LabeledContent("Config") {
+                    HStack(spacing: 8) {
+                        Text(abbrev(ConfigService.defaultConfigPath.path))
+                            .font(Theme.codeSm)
+                            .foregroundStyle(Theme.textMuted)
+                            .textSelection(.enabled)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Button("Reveal") {
+                            NSWorkspace.shared.activateFileViewerSelecting([ConfigService.defaultConfigPath])
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
+        .scenePadding()
+        .frame(minWidth: 480, minHeight: 520)
         .onChange(of: appState.config) {
             appState.saveConfig()
         }
-    }
-
-    @ViewBuilder
-    private var advancedTab: some View {
-        Form {
-            Section("Custom Endpoint") {
-                TextField("Base URL", text: baseURLBinding,
-                          prompt: Text(appState.resolvedProvider.defaultBaseURL ?? "required").font(Theme.code))
-                    .font(Theme.code)
-                    .textFieldStyle(.roundedBorder)
-
-                if appState.resolvedProvider.requiresBaseURL {
-                    Label("Required for OpenAI-Compatible", systemImage: "exclamationmark.triangle")
-                        .font(Theme.bodySm)
-                        .foregroundStyle(Theme.warning)
-                }
-            }
-
-            Section("Config File") {
-                LabeledContent("Path") {
-                    Text(abbrev(ConfigService.defaultConfigPath.path))
-                        .font(Theme.codeSm)
-                        .foregroundStyle(Theme.textMuted)
-                        .textSelection(.enabled)
-                }
-
-                Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([ConfigService.defaultConfigPath])
-                }
-            }
-        }
-        .formStyle(.grouped)
     }
 
     @ViewBuilder
