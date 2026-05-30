@@ -2,16 +2,19 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(AppState.self) private var appState
+    @State private var selectedTab: AppTab = .dashboard
+
+    enum AppTab: Hashable { case dashboard, pipeline }
 
     var body: some View {
-        TabView {
-            Tab("Dashboard", systemImage: "gauge.with.dots.needle.bottom.50percent") {
+        TabView(selection: $selectedTab) {
+            Tab("Dashboard", systemImage: "newspaper", value: AppTab.dashboard) {
                 DashboardView()
             }
-            Tab("History", systemImage: "clock") {
-                HistoryView()
+            Tab("Pipeline", systemImage: "square.stack.3d.up", value: AppTab.pipeline) {
+                PipelineView()
             }
         }
-        .frame(minWidth: 640, minHeight: 440)
+        .frame(minWidth: 760, minHeight: 540)
     }
 }
