@@ -17,5 +17,13 @@ let package = Package(
                 .swiftLanguageMode(.v5),
             ]
         ),
+        .testTarget(
+            name: "VibeShotTests",
+            dependencies: ["VibeShot"],
+            path: "Tests/VibeShotTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v5),
+            ]
+        ),
     ]
 )
