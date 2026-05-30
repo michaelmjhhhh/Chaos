@@ -1,17 +1,38 @@
 import Foundation
 
-struct RecentFile: Identifiable {
-    let id = UUID()
+struct RecentFile: Identifiable, Codable, Equatable {
+    let id: UUID
     let originalName: String
     let newName: String
     let path: String
+    let sourcePath: String
     let timestamp: Date
     let duration: TimeInterval
     let result: Result
 
-    enum Result {
+    enum Result: Codable, Equatable {
         case success
         case error(String)
+    }
+
+    init(
+        id: UUID = UUID(),
+        originalName: String,
+        newName: String,
+        path: String,
+        sourcePath: String = "",
+        timestamp: Date,
+        duration: TimeInterval,
+        result: Result
+    ) {
+        self.id = id
+        self.originalName = originalName
+        self.newName = newName
+        self.path = path
+        self.sourcePath = sourcePath
+        self.timestamp = timestamp
+        self.duration = duration
+        self.result = result
     }
 
     var isError: Bool {
