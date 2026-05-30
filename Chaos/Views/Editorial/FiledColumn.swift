@@ -7,6 +7,7 @@ struct FiledColumn: View {
     @Binding var filter: Filter
     @Binding var selection: RecentFile.ID?
     @FocusState.Binding var searchFocused: Bool
+    var onRetry: (RecentFile) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -174,6 +175,11 @@ struct FiledColumn: View {
                 selection = file.id
             }
             .contextMenu {
+                if file.isError {
+                    Button("Retry") {
+                        onRetry(file)
+                    }
+                }
                 if !file.path.isEmpty {
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)])

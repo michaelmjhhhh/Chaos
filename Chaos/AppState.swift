@@ -25,6 +25,7 @@ final class AppState {
     @ObservationIgnored private var watcher: DirectoryWatcher?
     @ObservationIgnored private let processor = FileProcessor()
     @ObservationIgnored private let configService = ConfigService()
+    @ObservationIgnored private let historyStore = HistoryStore()
 
     var isWatching: Bool {
         if case .running = watcherStatus { return true }
@@ -64,6 +65,13 @@ final class AppState {
         config.copyToClipboard ?? false
     }
 
+    var resolvedNamingPolicy: NamingPolicy {
+        NamingPolicy(
+            template: config.filenameTemplate,
+            subfolderRule: SubfolderRule.from(config.subfolderRule)
+        )
+    }
+
     var successRate: Double {
         guard totalProcessed > 0 else { return 0 }
         return Double(successes) / Double(totalProcessed)
@@ -101,6 +109,7 @@ final class AppState {
 
     func loadConfig() {
         config = configService.load()
+        recentFiles = historyStore.load()
     }
 
     func saveConfig() {
@@ -169,6 +178,42 @@ final class AppState {
             return
         }
 
+        await processInput(url: url)
+    }
+
+    func retry(_ file: RecentFile) {
+        let sourceURL = URL(fileURLWithPath: file.sourcePath)
+        guard !file.sourcePath.isEmpty,
+              FileManager.default.fileExists(atPath: sourceURL.path) else {
+            record(RecentFile(
+                originalName: file.originalName,
+                newName: "",
+                path: "",
+                sourcePath: file.sourcePath,
+                timestamp: Date(),
+                duration: 0,
+                result: .error("Source image is unavailable")
+            ))
+            return
+        }
+
+        Task {
+            await processInput(url: sourceURL)
+        }
+    }
+
+    func processDroppedURLs(_ urls: [URL]) {
+        let accepted = urls.filter(ImageIntake.accepts)
+        guard !accepted.isEmpty else { return }
+
+        Task {
+            for url in accepted {
+                await processInput(url: url)
+            }
+        }
+    }
+
+    private func processInput(url: URL) async {
         let originalName = url.lastPathComponent
         currentFile = originalName
         currentStage = .analyzing
@@ -185,7 +230,8 @@ final class AppState {
                 apiKey: config.apiKey ?? "",
                 model: resolvedModel,
                 language: resolvedLanguage,
-                copyToClipboard: resolvedCopyToClipboard
+                copyToClipboard: resolvedCopyToClipboard,
+                namingPolicy: resolvedNamingPolicy
             ) { [weak self] stage in
                 await self?.setCurrentStage(stage)
             }
@@ -201,12 +247,12 @@ final class AppState {
                 originalName: result.originalName,
                 newName: result.destinationURL.lastPathComponent,
                 path: result.destinationURL.path,
+                sourcePath: url.path,
                 timestamp: Date(),
                 duration: result.duration,
                 result: .success
             )
-            recentFiles.insert(entry, at: 0)
-            if recentFiles.count > 50 { recentFiles = Array(recentFiles.prefix(50)) }
+            record(entry)
 
             currentStage = .success(result.destinationURL.lastPathComponent)
             currentFile = result.destinationURL.lastPathComponent
@@ -221,12 +267,24 @@ final class AppState {
                 originalName: originalName,
                 newName: "",
                 path: "",
+                sourcePath: url.path,
                 timestamp: Date(),
                 duration: 0,
                 result: .error(error.localizedDescription)
             )
-            recentFiles.insert(entry, at: 0)
-            if recentFiles.count > 50 { recentFiles = Array(recentFiles.prefix(50)) }
+            record(entry)
+        }
+    }
+
+    private func record(_ entry: RecentFile) {
+        recentFiles.insert(entry, at: 0)
+        if recentFiles.count > 500 {
+            recentFiles = Array(recentFiles.prefix(500))
+        }
+        do {
+            try historyStore.save(recentFiles)
+        } catch {
+            apiStatus = "HISTORY FAIL"
         }
     }
 

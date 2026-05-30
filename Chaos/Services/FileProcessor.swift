@@ -21,6 +21,7 @@ actor FileProcessor {
         model: String,
         language: SlugLanguage,
         copyToClipboard: Bool,
+        namingPolicy: NamingPolicy = NamingPolicy(),
         onStageChange: @Sendable (ProcessingStage) async -> Void = { _ in }
     ) async throws -> ProcessResult {
         let start = Date()
@@ -39,12 +40,15 @@ actor FileProcessor {
             language: language
         )
         let slug = SlugSanitizer.sanitize(rawSlug)
+        let processingDate = Date()
+        let baseName = namingPolicy.renderedBaseName(slug: slug, date: processingDate)
+        let destinationDirectory = namingPolicy.outputDirectory(base: outputDir, date: processingDate)
 
         await onStageChange(.renaming)
         let destination = try FileRenamer.moveScreenshot(
             from: screenshotURL,
-            toDirectory: outputDir,
-            slug: slug
+            toDirectory: destinationDirectory,
+            baseName: baseName
         )
 
         if copyToClipboard {

@@ -160,6 +160,10 @@ struct DashboardView: View {
             elapsedSeconds: heroElapsed,
             includesClipboard: appState.resolvedCopyToClipboard
         )
+        .dropDestination(for: URL.self) { urls, _ in
+            appState.processDroppedURLs(urls)
+            return urls.contains(where: ImageIntake.accepts)
+        }
     }
 
     private var latestThumbnailPath: String? {

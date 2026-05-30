@@ -10,7 +10,11 @@ A native macOS app that watches for screenshots, uses AI vision to generate desc
 4. **Moves** it to your output directory
 5. **Optionally** copies the image to your clipboard
 
-All from a native SwiftUI menu bar app with a live dashboard, processing history, and settings — no CLI required.
+You can also drop an existing image onto the dashboard to run it through the
+same filing workflow.
+
+All from a native SwiftUI menu bar app with a live dashboard, durable processing
+history, and settings — no CLI required.
 
 ## Requirements
 
@@ -76,6 +80,10 @@ Chaos config does not yet exist. The legacy config is left untouched.
 
 - **Dashboard** — live status, processing metrics (success rate, avg/p95 latency), recent activity
 - **History** — searchable table of all processed files with error filtering
+- **Durable History** — keeps the latest 500 successful and failed attempts across launches
+- **Retry** — retry a failed image from its Pipeline context menu
+- **Drop Intake** — process existing PNG, JPEG, HEIC, and WebP files from the Dashboard
+- **Organization** — filename templates plus optional daily or monthly output folders
 - **Menu Bar** — always-on popover with quick start/stop, recent files, and output folder access
 - **Settings** — provider picker, API key, model, directories, language (English/Chinese), clipboard toggle
 - **Safety Guards** — only processes files matching macOS screenshot patterns (prefix, PNG header, size, recency)
@@ -127,8 +135,12 @@ Chaos only processes files that look like freshly taken macOS screenshots:
 
 ## Output Format
 
+The default template is:
+
 ```
-<descriptive-slug>_<HHMMSS>.png
+{slug}_{time}
 ```
 
-If a collision occurs, a suffix is appended: `<slug>-2_<HHMMSS>.png`, up to 100 attempts.
+Templates support `{slug}`, `{date}`, and `{time}`. Chaos preserves the source
+image extension. If a collision occurs, a suffix is appended before the
+extension, up to 100 attempts.

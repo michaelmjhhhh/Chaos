@@ -90,7 +90,8 @@ struct PipelineView: View {
                 searchText: $searchText,
                 filter: $filter,
                 selection: $selection,
-                searchFocused: $searchFocused
+                searchFocused: $searchFocused,
+                onRetry: appState.retry
             )
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }

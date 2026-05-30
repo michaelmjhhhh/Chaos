@@ -1,20 +1,17 @@
 import Foundation
 
 enum FileRenamer {
-    static func moveScreenshot(from src: URL, toDirectory outputDir: URL, slug: String) throws -> URL {
+    static func moveScreenshot(from src: URL, toDirectory outputDir: URL, baseName: String) throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: outputDir, withIntermediateDirectories: true)
-
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HHmmss"
-        let ts = formatter.string(from: Date())
+        let ext = src.pathExtension.isEmpty ? "png" : src.pathExtension.lowercased()
 
         for i in 0..<100 {
             let name: String
             if i == 0 {
-                name = "\(slug)_\(ts).png"
+                name = "\(baseName).\(ext)"
             } else {
-                name = "\(slug)-\(i + 1)_\(ts).png"
+                name = "\(baseName)-\(i + 1).\(ext)"
             }
             let dst = outputDir.appendingPathComponent(name)
 
@@ -33,7 +30,7 @@ enum FileRenamer {
             }
         }
 
-        throw ChaosError.renameCollision(slug)
+        throw ChaosError.renameCollision(baseName)
     }
 }
 
