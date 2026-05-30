@@ -53,7 +53,7 @@ final class AppState {
 
     var resolvedOutputDir: String {
         let o = config.outputDir?.trimmingCharacters(in: .whitespaces) ?? ""
-        return o.isEmpty ? NSHomeDirectory() + "/Desktop/vibe-shot-output" : o
+        return o.isEmpty ? NSHomeDirectory() + "/Desktop/chaos-output" : o
     }
 
     var resolvedLanguage: SlugLanguage {

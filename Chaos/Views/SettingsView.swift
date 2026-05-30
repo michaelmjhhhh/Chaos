@@ -107,14 +107,14 @@ struct SettingsView: View {
 
             Section("Config File") {
                 LabeledContent("Path") {
-                    Text(abbrev(ConfigService.configPath.path))
+                    Text(abbrev(ConfigService.defaultConfigPath.path))
                         .font(Theme.codeSm)
                         .foregroundStyle(Theme.textMuted)
                         .textSelection(.enabled)
                 }
 
                 Button("Reveal in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([ConfigService.configPath])
+                    NSWorkspace.shared.activateFileViewerSelecting([ConfigService.defaultConfigPath])
                 }
             }
         }

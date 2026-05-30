@@ -2,7 +2,7 @@ import Foundation
 
 final class DirectoryWatcher: @unchecked Sendable {
     private let watchURL: URL
-    private let queue = DispatchQueue(label: "com.vibeshot.watcher", qos: .utility)
+    private let queue = DispatchQueue(label: "com.chaos.watcher", qos: .utility)
     private var source: DispatchSourceFileSystemObject?
     private var fileDescriptor: Int32 = -1
     private var seenFiles = Set<String>()

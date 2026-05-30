@@ -1,5 +1,5 @@
 import XCTest
-@testable import VibeShot
+@testable import Chaos
 
 final class DirectoryWatcherTests: XCTestCase {
     func testStartReturnsFalseWhenDirectoryCannotBeOpened() {

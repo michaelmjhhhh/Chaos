@@ -33,11 +33,11 @@ enum FileRenamer {
             }
         }
 
-        throw VibeShotError.renameCollision(slug)
+        throw ChaosError.renameCollision(slug)
     }
 }
 
-enum VibeShotError: LocalizedError {
+enum ChaosError: LocalizedError {
     case renameCollision(String)
     case apiError(String)
     case configError(String)

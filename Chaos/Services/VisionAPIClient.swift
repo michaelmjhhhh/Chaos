@@ -46,7 +46,7 @@ actor VisionAPIClient {
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw VibeShotError.apiError("HTTP \(statusCode)")
+            throw ChaosError.apiError("HTTP \(statusCode)")
         }
 
         return try parseSlugResponse(data)
@@ -96,7 +96,7 @@ actor VisionAPIClient {
 
     private func parseSlugResponse(_ data: Data) throws -> String {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw VibeShotError.apiError("Invalid JSON response")
+            throw ChaosError.apiError("Invalid JSON response")
         }
 
         // OpenAI-style: choices[0].message.content
@@ -133,13 +133,13 @@ actor VisionAPIClient {
         // Check for provider error
         if let errorObj = json["error"] as? [String: Any],
            let msg = errorObj["message"] as? String {
-            throw VibeShotError.apiError(msg)
+            throw ChaosError.apiError(msg)
         }
         if let errorStr = json["error"] as? String {
-            throw VibeShotError.apiError(errorStr)
+            throw ChaosError.apiError(errorStr)
         }
 
-        throw VibeShotError.apiError("Empty response from provider")
+        throw ChaosError.apiError("Empty response from provider")
     }
 }
 

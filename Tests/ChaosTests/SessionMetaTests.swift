@@ -1,8 +1,8 @@
 import XCTest
-@testable import VibeShot
+@testable import Chaos
 
 final class SessionMetaTests: XCTestCase {
-    private let defaultsKey = "vibeshot.test.sessionNumber"
+    private let defaultsKey = "chaos.test.sessionNumber"
 
     override func setUp() {
         super.setUp()

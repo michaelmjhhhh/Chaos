@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct VibeShotApp: App {
+struct ChaosApp: App {
     @State private var appState = AppState()
 
     var body: some Scene {

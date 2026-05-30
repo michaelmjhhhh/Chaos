@@ -91,6 +91,6 @@ actor FileProcessor {
             try await Task.sleep(for: .milliseconds(Int(interval * 1000)))
         }
 
-        throw VibeShotError.fileNotStable(url.lastPathComponent)
+        throw ChaosError.fileNotStable(url.lastPathComponent)
     }
 }

@@ -8,7 +8,7 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("VibeShot")
+                Text("Chaos")
                     .font(.system(size: 14, weight: .regular, design: .serif))
                     .tracking(-0.2)
 
@@ -83,7 +83,7 @@ struct MenuBarView: View {
                 appState.stop()
                 NSApp.terminate(nil)
             } label: {
-                Text("Quit VibeShot")
+                Text("Quit Chaos")
                     .font(Theme.bodySm)
                     .foregroundStyle(Theme.textMuted)
             }

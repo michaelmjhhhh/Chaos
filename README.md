@@ -1,4 +1,4 @@
-# VibeShot
+# Chaos
 
 A native macOS app that watches for screenshots, uses AI vision to generate descriptive filenames, and automatically renames and organizes them.
 
@@ -38,7 +38,7 @@ swift build
 ./build-app.sh
 
 # Launch
-open .build/VibeShot.app
+open .build/Chaos.app
 ```
 
 Then:
@@ -50,13 +50,14 @@ Then:
 
 ## Shared Config
 
-VibeShot reads and writes the same config file as the [vibe-shot CLI](https://github.com/michaelmjhhhh/vibe-shot):
+Chaos reads and writes its config file at:
 
 ```
-~/Library/Application Support/vibe-shot/config.json
+~/Library/Application Support/chaos/config.json
 ```
 
-Settings stay in sync between the native app and the CLI tool.
+On first launch, Chaos copies an existing `vibe-shot` CLI config forward when a
+Chaos config does not yet exist. The legacy config is left untouched.
 
 ## Features
 
@@ -71,8 +72,8 @@ Settings stay in sync between the native app and the CLI tool.
 ## Project Structure
 
 ```
-VibeShot/
-├── VibeShotApp.swift          # App entry — WindowGroup + MenuBarExtra + Settings
+Chaos/
+├── ChaosApp.swift          # App entry — WindowGroup + MenuBarExtra + Settings
 ├── AppState.swift             # @Observable central state and business logic
 ├── Models/
 │   ├── AppConfig.swift        # Codable config (shared JSON schema with CLI)
@@ -100,7 +101,7 @@ VibeShot/
 
 ## Screenshot Matching
 
-VibeShot only processes files that look like freshly taken macOS screenshots:
+Chaos only processes files that look like freshly taken macOS screenshots:
 
 - Filename starts with `Screenshot`, `屏幕快照`, or `截屏`
 - Extension is `.png`

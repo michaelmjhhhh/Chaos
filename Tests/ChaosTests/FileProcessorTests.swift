@@ -1,5 +1,5 @@
 import XCTest
-@testable import VibeShot
+@testable import Chaos
 
 final class FileProcessorTests: XCTestCase {
     func testReportsRenamingAfterAnalysis() async throws {

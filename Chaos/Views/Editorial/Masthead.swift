@@ -13,7 +13,7 @@ struct Masthead: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                segment("VIBESHOT")
+                segment("CHAOS")
                 separator
                 segment("DAILY EDITION")
                 separator

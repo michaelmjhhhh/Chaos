@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "VibeShot",
+    name: "Chaos",
     platforms: [.macOS(.v15)],
     targets: [
         .executableTarget(
-            name: "VibeShot",
-            path: "VibeShot",
+            name: "Chaos",
+            path: "Chaos",
             exclude: ["Info.plist"],
             resources: [
                 .process("Resources"),
@@ -18,9 +18,9 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "VibeShotTests",
-            dependencies: ["VibeShot"],
-            path: "Tests/VibeShotTests",
+            name: "ChaosTests",
+            dependencies: ["Chaos"],
+            path: "Tests/ChaosTests",
             swiftSettings: [
                 .swiftLanguageMode(.v5),
             ]

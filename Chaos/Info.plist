@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.vibeshot.app</string>
+    <string>com.chaos.app</string>
     <key>CFBundleName</key>
-    <string>VibeShot</string>
+    <string>Chaos</string>
     <key>CFBundleDisplayName</key>
-    <string>VibeShot</string>
+    <string>Chaos</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -15,6 +15,8 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>VibeShot</string>
+    <string>Chaos</string>
+    <key>CFBundleIconFile</key>
+    <string>Chaos.icns</string>
 </dict>
 </plist>
