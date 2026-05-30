@@ -15,7 +15,7 @@ struct PipelineView: View {
     private let liveColumnWidth: CGFloat = 140
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             PaperBackground()
 
             VStack(spacing: 0) {
@@ -24,11 +24,14 @@ struct PipelineView: View {
                 VStack(alignment: .leading, spacing: Theme.sMed) {
                     headerRow
                     boardBody
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 .padding(.horizontal, Theme.sLg)
                 .padding(.top, Theme.sLg)
                 .padding(.bottom, Theme.sLg)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(minWidth: 760, minHeight: 540)
         .focusable()
