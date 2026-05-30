@@ -112,12 +112,53 @@ struct SectionHeader: ViewModifier {
     }
 }
 
+struct SmallCaps: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(Theme.smallCapsSm)
+            .tracking(1.2)
+            .textCase(.uppercase)
+    }
+}
+
+struct ClippingCard: ViewModifier {
+    var padding: CGFloat = 10
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Theme.rule)
+                .frame(height: 0.5)
+            content
+                .padding(padding)
+        }
+        .background(Theme.surfaceCard)
+    }
+}
+
+struct Marginalia: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(Theme.serifItalicSm)
+            .foregroundStyle(Theme.textSoft)
+    }
+}
+
 extension View {
     func card(padding: CGFloat = 16) -> some View {
         modifier(CardModifier(padding: padding))
     }
     func sectionHead() -> some View {
         modifier(SectionHeader())
+    }
+    func smallCaps() -> some View {
+        modifier(SmallCaps())
+    }
+    func clipping(padding: CGFloat = 10) -> some View {
+        modifier(ClippingCard(padding: padding))
+    }
+    func marginalia() -> some View {
+        modifier(Marginalia())
     }
 }
 
