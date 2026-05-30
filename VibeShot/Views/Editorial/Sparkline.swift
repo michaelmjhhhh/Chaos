@@ -13,6 +13,10 @@ struct Sparkline: View {
         return r > 0 ? r : 1
     }
 
+    private var hasData: Bool {
+        values.count >= 2 && maxValue != minValue
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sMicro) {
             HStack(alignment: .firstTextBaseline) {
@@ -20,24 +24,21 @@ struct Sparkline: View {
                     .font(Theme.serifItalicSm)
                     .foregroundStyle(Theme.textSoft)
                 Spacer(minLength: Theme.sMed)
-                if let last = lastValueText {
-                    Text(last)
-                        .font(Theme.codeSm)
-                        .foregroundStyle(Theme.textMuted)
-                }
+                Text(lastValueText ?? "—")
+                    .font(Theme.codeSm)
+                    .foregroundStyle(Theme.textMuted)
             }
 
-            chart
-                .frame(height: height)
+            if hasData {
+                chart.frame(height: height)
+            }
         }
     }
 
     @ViewBuilder
     private var chart: some View {
         Canvas { ctx, size in
-            let allSame = maxValue == minValue
-            guard values.count >= 2, !allSame else {
-                drawFlat(ctx: ctx, size: size)
+            guard values.count >= 2, maxValue != minValue else {
                 return
             }
 
@@ -67,12 +68,6 @@ struct Sparkline: View {
         }
     }
 
-    private func drawFlat(ctx: GraphicsContext, size: CGSize) {
-        var p = Path()
-        p.move(to: CGPoint(x: 0, y: size.height / 2))
-        p.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-        ctx.stroke(p, with: .color(Theme.textSoft.opacity(0.4)), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
-    }
 }
 
 #Preview {

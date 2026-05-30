@@ -180,14 +180,11 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var editorialColumn: some View {
-        VStack(alignment: .leading, spacing: Theme.sLg) {
+        VStack(alignment: .leading, spacing: Theme.sSec) {
             todaysReadingBlock
-            EditorialRule()
             numbersBlock
-            EditorialRule()
             if !appState.vocabularyToday.isEmpty {
                 vocabularyBlock
-                EditorialRule()
             }
             directoriesBlock
         }
@@ -199,20 +196,26 @@ struct DashboardView: View {
             Text("TODAY'S READING").smallCaps().foregroundStyle(Theme.textMuted)
             Sparkline(
                 values: appState.latencyHistory,
-                caption: "Fig. 1 — Latency, last \(appState.latencyHistory.count)",
+                caption: "Fig. 1 — Latency",
                 lastValueText: appState.latencyHistory.last.map { String(format: "%.1fs", $0) }
             )
             Sparkline(
                 values: appState.hourlyThroughput.map(Double.init),
                 caption: "Fig. 2 — Throughput, hourly",
-                lastValueText: appState.hourlyThroughput.last.map(String.init)
+                lastValueText: nonZeroThroughputLabel
             )
             Sparkline(
                 values: appState.successRateHistory,
-                caption: "Fig. 3 — Success, last \(appState.successRateHistory.count)",
+                caption: "Fig. 3 — Success rate",
                 lastValueText: appState.successRateHistory.last.map { String(format: "%.0f%%", $0 * 100) }
             )
         }
+    }
+
+    private var nonZeroThroughputLabel: String? {
+        let total = appState.hourlyThroughput.reduce(0, +)
+        guard total > 0 else { return nil }
+        return "\(total) today"
     }
 
     @ViewBuilder
