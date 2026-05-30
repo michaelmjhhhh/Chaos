@@ -12,6 +12,8 @@ struct PipelineView: View {
 
     @Namespace private var pipelineNS
 
+    private let liveColumnWidth: CGFloat = 140
+
     var body: some View {
         ZStack {
             PaperBackground()
@@ -19,9 +21,13 @@ struct PipelineView: View {
             VStack(spacing: 0) {
                 Masthead(sessionNumber: appState.session.sessionNumber, date: Date())
 
-                board
-                    .padding(.horizontal, Theme.sLg)
-                    .padding(.vertical, Theme.sLg)
+                VStack(alignment: .leading, spacing: Theme.sMed) {
+                    headerRow
+                    boardBody
+                }
+                .padding(.horizontal, Theme.sLg)
+                .padding(.top, Theme.sLg)
+                .padding(.bottom, Theme.sLg)
             }
         }
         .frame(minWidth: 760, minHeight: 540)
@@ -39,22 +45,42 @@ struct PipelineView: View {
     }
 
     @ViewBuilder
-    private var board: some View {
+    private var headerRow: some View {
+        VStack(alignment: .leading, spacing: Theme.sSmall) {
+            HStack(spacing: Theme.sMed) {
+                headerLabel("CAUGHT", isActive: activeColumn == .caught)
+                    .frame(width: liveColumnWidth, alignment: .leading)
+                headerLabel("READING", isActive: activeColumn == .reading)
+                    .frame(width: liveColumnWidth, alignment: .leading)
+                headerLabel("SETTING", isActive: activeColumn == .setting)
+                    .frame(width: liveColumnWidth, alignment: .leading)
+                headerLabel("FILED", isActive: false)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            EditorialRule()
+        }
+    }
+
+    @ViewBuilder
+    private func headerLabel(_ title: String, isActive: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).smallCaps().foregroundStyle(Theme.ink)
+            Rectangle()
+                .fill(isActive ? Theme.coral : Color.clear)
+                .frame(height: 1)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isActive)
+        }
+    }
+
+    @ViewBuilder
+    private var boardBody: some View {
         HStack(alignment: .top, spacing: Theme.sMed) {
-            PipelineColumn(title: "CAUGHT", isActive: activeColumn == .caught) {
-                liveCardArea(showCard: activeColumn == .caught)
-            }
-            .frame(width: 140)
-
-            PipelineColumn(title: "READING", isActive: activeColumn == .reading) {
-                liveCardArea(showCard: activeColumn == .reading)
-            }
-            .frame(width: 140)
-
-            PipelineColumn(title: "SETTING", isActive: activeColumn == .setting) {
-                liveCardArea(showCard: activeColumn == .setting)
-            }
-            .frame(width: 140)
+            liveCardArea(active: activeColumn == .caught)
+                .frame(width: liveColumnWidth, alignment: .top)
+            liveCardArea(active: activeColumn == .reading)
+                .frame(width: liveColumnWidth, alignment: .top)
+            liveCardArea(active: activeColumn == .setting)
+                .frame(width: liveColumnWidth, alignment: .top)
 
             FiledColumn(
                 files: appState.recentFiles,
@@ -63,18 +89,22 @@ struct PipelineView: View {
                 selection: $selection,
                 searchFocused: $searchFocused
             )
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
     @ViewBuilder
-    private func liveCardArea(showCard: Bool) -> some View {
-        if showCard, let card = inFlightCard {
+    private func liveCardArea(active: Bool) -> some View {
+        if active, let card = inFlightCard {
             PipelineCard(file: card, isInFlight: true)
                 .matchedGeometryEffect(id: "inFlight", in: pipelineNS)
                 .transition(.opacity)
         } else {
-            EmptyColumnDash()
+            Text("—")
+                .font(.system(size: 16, design: .serif))
+                .foregroundStyle(Theme.ink.opacity(0.3))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 2)
         }
     }
 

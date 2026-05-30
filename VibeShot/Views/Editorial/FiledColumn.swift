@@ -68,32 +68,21 @@ struct FiledColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            if !files.isEmpty {
+                controlBar
+                    .padding(.bottom, Theme.sMed)
+            }
             content
         }
     }
 
     @ViewBuilder
-    private var header: some View {
-        VStack(alignment: .leading, spacing: Theme.sSmall) {
-            HStack {
-                Text("FILED")
-                    .smallCaps()
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-            }
-            Rectangle()
-                .fill(Theme.rule)
-                .frame(height: 0.5)
-
-            HStack(spacing: Theme.sMed) {
-                searchField
-                Spacer()
-                filterChips
-            }
-            .padding(.top, Theme.sSmall)
+    private var controlBar: some View {
+        HStack(spacing: Theme.sMed) {
+            searchField
+            Spacer()
+            filterChips
         }
-        .padding(.bottom, Theme.sSmall)
     }
 
     @ViewBuilder
@@ -145,14 +134,11 @@ struct FiledColumn: View {
     @ViewBuilder
     private var content: some View {
         if visible.isEmpty {
-            VStack {
-                Spacer()
-                Text(filter == .errors ? "No errors filed." : "No filings yet.")
-                    .font(Theme.serifItalicLg)
-                    .foregroundStyle(Theme.textMuted)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(emptyMessage)
+                .font(Theme.serifItalicLg)
+                .foregroundStyle(Theme.textMuted)
+                .padding(.top, Theme.sLg)
+                .frame(maxWidth: .infinity, alignment: .center)
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
@@ -165,6 +151,13 @@ struct FiledColumn: View {
                 }
             }
         }
+    }
+
+    private var emptyMessage: String {
+        if files.isEmpty { return "No filings yet." }
+        if filter == .errors { return "No errors filed." }
+        if filter == .today { return "Nothing filed today." }
+        return "No matches."
     }
 
     @ViewBuilder
@@ -195,7 +188,30 @@ struct FiledColumn: View {
     }
 }
 
-#Preview {
+#Preview("Empty") {
+    struct PreviewWrapper: View {
+        @State var search = ""
+        @State var filter: FiledColumn.Filter = .all
+        @State var selection: RecentFile.ID? = nil
+        @FocusState var focus: Bool
+
+        var body: some View {
+            FiledColumn(
+                files: [],
+                searchText: $search,
+                filter: $filter,
+                selection: $selection,
+                searchFocused: $focus
+            )
+            .padding(20)
+            .frame(width: 360, height: 360)
+            .background(Theme.canvas)
+        }
+    }
+    return PreviewWrapper()
+}
+
+#Preview("With data") {
     struct PreviewWrapper: View {
         @State var search = ""
         @State var filter: FiledColumn.Filter = .all
