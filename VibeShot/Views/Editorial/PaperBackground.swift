@@ -1,13 +1,13 @@
 import SwiftUI
 
 struct PaperBackground: View {
-    var grainOpacity: Double = 0.05
+    var grainOpacity: Double = 0.025
 
     var body: some View {
         ZStack {
             Theme.canvas
             Canvas { context, size in
-                let cellSize: CGFloat = 2
+                let cellSize: CGFloat = 3
                 let columns = Int(size.width / cellSize) + 1
                 let rows = Int(size.height / cellSize) + 1
                 var rng = SeededRandom(seed: 0xA1B2C3)
@@ -15,8 +15,8 @@ struct PaperBackground: View {
                 for x in 0..<columns {
                     for y in 0..<rows {
                         let n = rng.nextDouble()
-                        guard n > 0.6 else { continue }
-                        let opacity = (n - 0.6) * 0.5
+                        guard n > 0.88 else { continue }
+                        let opacity = (n - 0.88) * 0.5
                         let rect = CGRect(
                             x: CGFloat(x) * cellSize,
                             y: CGFloat(y) * cellSize,
@@ -25,7 +25,7 @@ struct PaperBackground: View {
                         )
                         context.fill(
                             Path(rect),
-                            with: .color(Theme.ink.opacity(opacity * grainOpacity * 8))
+                            with: .color(Theme.ink.opacity(opacity * grainOpacity * 3))
                         )
                     }
                 }
