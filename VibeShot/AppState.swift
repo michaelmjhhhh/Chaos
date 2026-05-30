@@ -11,6 +11,10 @@ final class AppState {
     var recentFiles: [RecentFile] = []
     var apiStatus: String = "N/A"
 
+    var session = SessionMeta()
+    var hourlyThroughput: [Int] = Array(repeating: 0, count: 24)
+    var successWindow: [Double] = []
+
     var totalProcessed: Int = 0
     var successes: Int = 0
     var errors: Int = 0
@@ -77,6 +81,24 @@ final class AppState {
         return sorted[min(idx, sorted.count - 1)]
     }
 
+    var vocabularyToday: [String] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let slugs = recentFiles
+            .filter { !$0.isError }
+            .filter { calendar.startOfDay(for: $0.timestamp) == today }
+            .map { $0.newName }
+        return Tokenizer.topNouns(from: slugs, limit: 5)
+    }
+
+    var latencyHistory: [Double] {
+        Array(latencies.suffix(24))
+    }
+
+    var successRateHistory: [Double] {
+        Array(successWindow.suffix(20))
+    }
+
     func loadConfig() {
         config = configService.load()
     }
@@ -133,7 +155,12 @@ final class AppState {
     }
 
     private func handleNewFile(url: URL, watcherStartedAt: Date) async {
+        currentFile = url.lastPathComponent
+        currentStage = .caught
+
         guard ScreenshotGuard.isEligible(url: url, watcherStartedAt: watcherStartedAt) else {
+            currentFile = nil
+            currentStage = nil
             return
         }
 
@@ -141,6 +168,9 @@ final class AppState {
         currentFile = originalName
         currentStage = .analyzing
         totalProcessed += 1
+
+        let hourBucket = Calendar.current.component(.hour, from: Date())
+        hourlyThroughput[hourBucket] += 1
 
         do {
             currentStage = .renaming
@@ -155,9 +185,17 @@ final class AppState {
                 copyToClipboard: resolvedCopyToClipboard
             )
 
+            if resolvedCopyToClipboard {
+                currentStage = .clipboard
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+
             successes += 1
             latencies.append(result.duration)
             if latencies.count > 100 { latencies.removeFirst() }
+
+            successWindow.append(1.0)
+            if successWindow.count > 100 { successWindow.removeFirst() }
 
             let entry = RecentFile(
                 originalName: result.originalName,
@@ -175,6 +213,9 @@ final class AppState {
         } catch {
             errors += 1
             currentStage = .error(error.localizedDescription)
+
+            successWindow.append(0.0)
+            if successWindow.count > 100 { successWindow.removeFirst() }
 
             let entry = RecentFile(
                 originalName: originalName,
