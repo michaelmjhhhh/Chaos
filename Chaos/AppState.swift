@@ -195,6 +195,17 @@ final class AppState {
         }
     }
 
+    func processDroppedURLs(_ urls: [URL]) {
+        let accepted = urls.filter(ImageIntake.accepts)
+        guard !accepted.isEmpty else { return }
+
+        Task {
+            for url in accepted {
+                await processInput(url: url)
+            }
+        }
+    }
+
     private func processInput(url: URL) async {
         let originalName = url.lastPathComponent
         currentFile = originalName

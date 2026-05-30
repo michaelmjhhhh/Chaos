@@ -60,6 +60,9 @@ struct HeroCard: View {
                 .foregroundStyle(Theme.textMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 280)
+            Text("Drop an image to file it.")
+                .smallCaps()
+                .foregroundStyle(Theme.textSoft)
             Spacer()
         }
         .frame(maxWidth: .infinity)
