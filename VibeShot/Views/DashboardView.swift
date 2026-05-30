@@ -3,381 +3,312 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
     @State private var uptimeTick = false
+    @State private var ellipsisCount = 0
 
     var body: some View {
         ZStack {
-            Theme.canvas.ignoresSafeArea()
+            PaperBackground()
 
             VStack(spacing: 0) {
-                headerBar
-                Divider().overlay(Theme.divider)
+                Masthead(sessionNumber: appState.session.sessionNumber, date: Date())
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        statusRow
-                        metricsGrid
-                        directoriesRow
-                        recentActivityPreview
+                    VStack(alignment: .leading, spacing: Theme.sSec) {
+                        headlineStrip
+                        bodyColumns
                     }
-                    .padding(24)
+                    .padding(.horizontal, Theme.sSec)
+                    .padding(.vertical, Theme.sLg)
                 }
 
-                Divider().overlay(Theme.divider)
-                footerBar
+                colophon
             }
         }
-        .frame(minWidth: 520, minHeight: 420)
+        .frame(minWidth: 760, minHeight: 540)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 uptimeTick.toggle()
             }
+            Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { _ in
+                ellipsisCount = (ellipsisCount + 1) % 4
+            }
         }
     }
 
-    // MARK: - Header
-
     @ViewBuilder
-    private var headerBar: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Dashboard")
-                    .font(Theme.displayLg)
-                    .foregroundStyle(Theme.ink)
-                    .tracking(-0.5)
-
-                let _ = uptimeTick
-                if appState.isWatching, let t = appState.watcherStartedAt {
-                    Text("Running \(fmtUptime(t))")
-                        .font(Theme.bodySm)
-                        .foregroundStyle(Theme.textSoft)
-                }
+    private var headlineStrip: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: Theme.sSmall) {
+                headlineText
+                datelineText
             }
-
             Spacer()
-
-            if appState.isWatching {
-                Button {
-                    appState.stop()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 8))
-                        Text("Stop")
-                            .font(Theme.button)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 7)
-                    .background(Theme.error)
-                    .clipShape(.rect(cornerRadius: Theme.r6))
-                }
-                .buttonStyle(.plain)
-            } else {
-                Button {
-                    appState.start()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 9))
-                        Text("Start Watching")
-                            .font(Theme.button)
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 7)
-                    .background(Theme.coral)
-                    .clipShape(.rect(cornerRadius: Theme.r6))
-                }
-                .buttonStyle(.plain)
-            }
+            controlButton
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-    }
-
-    // MARK: - Status
-
-    @ViewBuilder
-    private var statusRow: some View {
-        HStack(spacing: 12) {
-            statusBadge
-                .frame(width: 38, height: 38)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(statusText)
-                    .font(Theme.titleMd)
-                    .foregroundStyle(statusColor)
-
-                if let f = appState.currentFile {
-                    Text(f)
-                        .font(Theme.codeSm)
-                        .foregroundStyle(Theme.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } else {
-                    Text(statusSubtext)
-                        .font(Theme.bodySm)
-                        .foregroundStyle(Theme.textSoft)
-                }
-            }
-
-            Spacer()
-        }
-        .card()
     }
 
     @ViewBuilder
-    private var statusBadge: some View {
-        let processing: Bool = {
-            switch appState.currentStage {
-            case .analyzing, .renaming, .clipboard: true
-            default: false
-            }
-        }()
-
+    private var headlineText: some View {
         switch appState.watcherStatus {
-        case .running where processing:
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 38, height: 38)
-                .background(Theme.surfaceMuted)
-                .clipShape(Circle())
-        case .running:
-            Image(systemName: "eye.fill")
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.success)
-                .frame(width: 38, height: 38)
-                .background(Theme.success.opacity(0.1))
-                .clipShape(Circle())
-        case .error:
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.error)
-                .frame(width: 38, height: 38)
-                .background(Theme.error.opacity(0.1))
-                .clipShape(Circle())
-        case .starting:
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 38, height: 38)
         case .stopped:
-            Image(systemName: "moon.fill")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.textSoft)
-                .frame(width: 38, height: 38)
-                .background(Theme.surfaceMuted)
-                .clipShape(Circle())
-        }
-    }
-
-    private var statusText: String {
-        switch appState.watcherStatus {
-        case .stopped: "Idle"
-        case .starting: "Starting…"
-        case .error(let m): m
+            Text("Quietly Watching.")
+                .font(Theme.displayHero)
+                .italic()
+                .foregroundStyle(Theme.warmInk)
+                .tracking(-0.5)
+        case .starting:
+            Text("Waking up\(ellipsisDots)")
+                .font(Theme.displayHero)
+                .foregroundStyle(Theme.warmInk)
+                .tracking(-0.5)
+        case .error(let msg):
+            Text(msg)
+                .font(Theme.displayHero)
+                .foregroundStyle(Theme.coral)
+                .tracking(-0.5)
         case .running:
             switch appState.currentStage {
-            case .caught: "Caught a screenshot…"
-            case .analyzing: "Analyzing screenshot…"
-            case .renaming: "Renaming file…"
-            case .clipboard: "Copying to clipboard…"
-            case .success(let n): "Done — \(n)"
-            case .error(let m): m
-            case .none: "Watching for screenshots"
+            case .analyzing, .renaming, .clipboard, .caught:
+                Text("Reading a new screenshot\(ellipsisDots)")
+                    .font(Theme.displayHero)
+                    .foregroundStyle(Theme.warmInk)
+                    .tracking(-0.5)
+            case .error:
+                Text("Trouble afoot.")
+                    .font(Theme.displayHero)
+                    .foregroundStyle(Theme.coral)
+                    .tracking(-0.5)
+            case .success, .none:
+                Text("Watching for screenshots.")
+                    .font(Theme.displayHero)
+                    .foregroundStyle(Theme.warmInk)
+                    .tracking(-0.5)
             }
         }
     }
 
-    private var statusSubtext: String {
-        switch appState.watcherStatus {
-        case .stopped: "Press Start to begin watching"
-        case .running: "Monitoring \(abbrev(appState.resolvedWatchDir))"
-        default: ""
-        }
-    }
-
-    private var statusColor: Color {
-        switch appState.watcherStatus {
-        case .stopped: Theme.textMuted
-        case .starting: Theme.ink
-        case .error: Theme.error
-        case .running:
-            switch appState.currentStage {
-            case .error: Theme.error
-            case .success: Theme.success
-            case .caught, .analyzing, .renaming, .clipboard: Theme.ink
-            case .none: Theme.ink
-            }
-        }
-    }
-
-    // MARK: - Metrics
-
-    @ViewBuilder
-    private var metricsGrid: some View {
-        HStack(spacing: 10) {
-            metricCard("Processed", "\(appState.totalProcessed)")
-            metricCard("Success", "\(appState.successes)", accent: Theme.success)
-            metricCard("Errors", "\(appState.errors)", accent: appState.errors > 0 ? Theme.error : nil)
-        }
-
-        HStack(spacing: 10) {
-            metricCard("Success Rate", String(format: "%.0f%%", appState.successRate * 100))
-            metricCard("Avg Latency", fmtDur(appState.avgLatency))
-            metricCard("P95", fmtDur(appState.p95Latency))
+    private var ellipsisDots: String {
+        switch ellipsisCount {
+        case 1: return "."
+        case 2: return ".."
+        case 3: return "..."
+        default: return ""
         }
     }
 
     @ViewBuilder
-    private func metricCard(_ label: String, _ value: String, accent: Color? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(Theme.captionSm)
-                .foregroundStyle(Theme.textSoft)
-                .textCase(.uppercase)
-                .tracking(0.6)
-
-            Text(value)
-                .font(.system(size: 22, weight: .regular, design: .serif))
-                .foregroundStyle(accent ?? Theme.ink)
-                .monospacedDigit()
-                .tracking(-0.3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card()
-    }
-
-    // MARK: - Directories
-
-    @ViewBuilder
-    private var directoriesRow: some View {
-        HStack(spacing: 10) {
-            dirCard("Watch", "eye", appState.resolvedWatchDir)
-            dirCard("Output", "arrow.down.to.line", appState.resolvedOutputDir)
-        }
+    private var datelineText: some View {
+        let _ = uptimeTick
+        let uptime: String = {
+            guard let t = appState.watcherStartedAt, appState.isWatching else { return "—" }
+            return fmtUptime(t)
+        }()
+        Text("RUNNING \(uptime) · PROVIDER · \(appState.resolvedProvider.displayName.uppercased())")
+            .smallCaps()
+            .foregroundStyle(Theme.textSoft)
     }
 
     @ViewBuilder
-    private func dirCard(_ label: String, _ icon: String, _ path: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.textSoft)
-                Text(label)
-                    .font(Theme.captionSm)
-                    .foregroundStyle(Theme.textSoft)
-                    .textCase(.uppercase)
-                    .tracking(0.6)
-            }
-
-            Text(abbrev(path))
-                .font(Theme.codeSm)
-                .foregroundStyle(Theme.textMuted)
-                .lineLimit(1)
-                .truncationMode(.middle)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .card(padding: 14)
-    }
-
-    // MARK: - Recent Activity Preview
-
-    @ViewBuilder
-    private var recentActivityPreview: some View {
-        if !appState.recentFiles.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Recent Activity")
-                        .sectionHead()
-                    Spacer()
+    private var controlButton: some View {
+        if appState.isWatching {
+            Button { appState.stop() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "stop.fill").font(.system(size: 8))
+                    Text("Stop").font(Theme.button)
                 }
-
-                VStack(spacing: 0) {
-                    ForEach(appState.recentFiles.prefix(3)) { f in
-                        HStack(spacing: 8) {
-                            Circle()
-                                .fill(f.isError ? Theme.error : Theme.success)
-                                .frame(width: 6, height: 6)
-
-                            Text(f.newName.isEmpty ? f.originalName : f.newName)
-                                .font(Theme.body)
-                                .foregroundStyle(Theme.textBody)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-
-                            Spacer()
-
-                            if f.duration > 0 {
-                                Text(String(format: "%.1fs", f.duration))
-                                    .font(Theme.codeSm)
-                                    .foregroundStyle(Theme.textSoft)
-                            }
-
-                            Text(f.timestamp, format: .dateTime.hour().minute().second())
-                                .font(Theme.codeSm)
-                                .foregroundStyle(Theme.textSoft)
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 14)
-
-                        if f.id != appState.recentFiles.prefix(3).last?.id {
-                            Divider().overlay(Theme.borderLight)
-                        }
-                    }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+                .background(Theme.error)
+                .clipShape(.rect(cornerRadius: Theme.r6))
+            }
+            .buttonStyle(.plain)
+        } else {
+            Button { appState.start() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill").font(.system(size: 9))
+                    Text("Start Watching").font(Theme.button)
                 }
-                .background(Theme.surfaceCard)
-                .clipShape(.rect(cornerRadius: Theme.r10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Theme.r10)
-                        .stroke(Theme.border, lineWidth: 0.5)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 7)
+                .background(Theme.coral)
+                .clipShape(.rect(cornerRadius: Theme.r6))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var bodyColumns: some View {
+        HStack(alignment: .top, spacing: 28) {
+            heroColumn
+                .frame(maxWidth: .infinity)
+                .layoutPriority(2)
+            editorialColumn
+                .frame(width: 280)
+        }
+    }
+
+    @ViewBuilder
+    private var heroColumn: some View {
+        HeroCard(
+            stage: appState.currentStage,
+            currentFile: appState.currentFile,
+            thumbnailPath: latestThumbnailPath,
+            proposedSlug: proposedSlug,
+            elapsedSeconds: heroElapsed,
+            includesClipboard: appState.resolvedCopyToClipboard
+        )
+    }
+
+    private var latestThumbnailPath: String? {
+        appState.recentFiles.first { !$0.isError && !$0.path.isEmpty }?.path
+    }
+
+    private var proposedSlug: String? {
+        switch appState.currentStage {
+        case .success(let name): return name
+        default: return appState.currentFile
+        }
+    }
+
+    private var heroElapsed: TimeInterval {
+        guard let last = appState.recentFiles.first else { return 0 }
+        return last.duration
+    }
+
+    @ViewBuilder
+    private var editorialColumn: some View {
+        VStack(alignment: .leading, spacing: Theme.sLg) {
+            todaysReadingBlock
+            EditorialRule()
+            numbersBlock
+            EditorialRule()
+            if !appState.vocabularyToday.isEmpty {
+                vocabularyBlock
+                EditorialRule()
+            }
+            directoriesBlock
+        }
+    }
+
+    @ViewBuilder
+    private var todaysReadingBlock: some View {
+        VStack(alignment: .leading, spacing: Theme.sMed) {
+            Text("TODAY'S READING").smallCaps().foregroundStyle(Theme.textMuted)
+            Sparkline(
+                values: appState.latencyHistory,
+                caption: "Fig. 1 — Latency, last \(appState.latencyHistory.count)",
+                lastValueText: appState.latencyHistory.last.map { String(format: "%.1fs", $0) }
+            )
+            Sparkline(
+                values: appState.hourlyThroughput.map(Double.init),
+                caption: "Fig. 2 — Throughput, hourly",
+                lastValueText: appState.hourlyThroughput.last.map(String.init)
+            )
+            Sparkline(
+                values: appState.successRateHistory,
+                caption: "Fig. 3 — Success, last \(appState.successRateHistory.count)",
+                lastValueText: appState.successRateHistory.last.map { String(format: "%.0f%%", $0 * 100) }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var numbersBlock: some View {
+        VStack(alignment: .leading, spacing: Theme.sSmall) {
+            Text("NUMBERS").smallCaps().foregroundStyle(Theme.textMuted)
+            HStack(spacing: Theme.sMed) {
+                MetricFigure(value: "\(appState.totalProcessed)", label: "Processed")
+                MetricFigure(value: "\(appState.successes)", label: "Successful")
+                MetricFigure(
+                    value: "\(appState.errors)",
+                    label: "Errors",
+                    accent: appState.errors > 0 ? Theme.error : nil
                 )
-                .shadow(color: Theme.shadowCard, radius: 4, y: 2)
+            }
+            Text("AVG \(fmtDur(appState.avgLatency)) · P95 \(fmtDur(appState.p95Latency))")
+                .font(Theme.codeSm)
+                .foregroundStyle(Theme.textSoft)
+        }
+    }
+
+    @ViewBuilder
+    private var vocabularyBlock: some View {
+        VStack(alignment: .leading, spacing: Theme.sSmall) {
+            Text("TODAY'S VOCABULARY").smallCaps().foregroundStyle(Theme.textMuted)
+            Text(appState.vocabularyToday.joined(separator: ", ") + ".")
+                .font(Theme.serifItalicLg)
+                .foregroundStyle(Theme.warmInk)
+                .lineLimit(3)
+        }
+    }
+
+    @ViewBuilder
+    private var directoriesBlock: some View {
+        VStack(alignment: .leading, spacing: Theme.sMed) {
+            Text("DIRECTORIES").smallCaps().foregroundStyle(Theme.textMuted)
+            directoryRow(icon: AnyView(EditorialIcon.Eye(size: 16)),
+                         label: "WATCH",
+                         path: appState.resolvedWatchDir)
+            directoryRow(icon: AnyView(EditorialIcon.TrayArrow(size: 16)),
+                         label: "OUTPUT",
+                         path: appState.resolvedOutputDir)
+        }
+    }
+
+    @ViewBuilder
+    private func directoryRow(icon: AnyView, label: String, path: String) -> some View {
+        HStack(alignment: .center, spacing: Theme.sSmall) {
+            icon
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label).smallCaps().foregroundStyle(Theme.textSoft)
+                Text(abbrev(path))
+                    .font(Theme.codeSm)
+                    .foregroundStyle(Theme.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
         }
     }
 
-    // MARK: - Footer
-
     @ViewBuilder
-    private var footerBar: some View {
-        HStack(spacing: 0) {
-            Label(appState.resolvedProvider.displayName, systemImage: "server.rack")
-                .font(Theme.captionSm)
-                .foregroundStyle(Theme.textSoft)
-
-            Text("  ·  ").foregroundStyle(Theme.borderLight)
-
-            Text(appState.resolvedModel)
-                .font(Theme.codeSm)
-                .foregroundStyle(Theme.textSoft)
-
-            Text("  ·  ").foregroundStyle(Theme.borderLight)
-
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(apiColor)
-                    .frame(width: 5, height: 5)
-                Text("API \(appState.apiStatus)")
-                    .font(Theme.captionSm)
+    private var colophon: some View {
+        VStack(spacing: 0) {
+            EditorialRule()
+            HStack(spacing: Theme.sLg) {
+                Text("API · \(appState.apiStatus.uppercased())")
+                    .smallCaps()
+                    .foregroundStyle(apiColor)
+                Text("PROVIDER · \(appState.resolvedProvider.displayName.uppercased())")
+                    .smallCaps()
                     .foregroundStyle(Theme.textSoft)
+                Text("MODEL · \(appState.resolvedModel.uppercased())")
+                    .smallCaps()
+                    .foregroundStyle(Theme.textSoft)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                if let t = appState.watcherStartedAt, appState.isWatching {
+                    let _ = uptimeTick
+                    Text("\(fmtUptime(t)) UPTIME")
+                        .smallCaps()
+                        .foregroundStyle(Theme.textSoft)
+                }
             }
-
-            Spacer()
+            .padding(.horizontal, Theme.sSec)
+            .padding(.vertical, Theme.sSmall)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 8)
     }
 
     private var apiColor: Color {
         switch appState.apiStatus {
-        case "OK": Theme.success
-        case "FAIL": Theme.error
-        default: Theme.textSoft
+        case "OK": return Theme.success
+        case "FAIL": return Theme.error
+        default: return Theme.textSoft
         }
     }
-
-    // MARK: - Fmt
 
     private func fmtDur(_ s: TimeInterval) -> String {
         if s <= 0 { return "—" }
@@ -388,8 +319,8 @@ struct DashboardView: View {
     private func fmtUptime(_ d: Date) -> String {
         let i = Int(Date().timeIntervalSince(d))
         let h = i / 3600, m = (i % 3600) / 60, s = i % 60
-        if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m \(s)s"
+        if h > 0 { return "\(h)H \(m)M" }
+        return "\(m)M \(s)S"
     }
 
     private func abbrev(_ p: String) -> String {
