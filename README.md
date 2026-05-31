@@ -28,7 +28,7 @@ Requires macOS 15+ and Swift 6.0+.
 ## Setup
 
 1. Open **Settings** (Cmd+,)
-2. Pick a provider and enter your API key
+2. Pick a provider and enter an API key if it requires one
 3. Set your watch and output directories
 4. Hit **Start Watching** on the dashboard
 5. Take a screenshot — it gets renamed and filed automatically
@@ -42,6 +42,19 @@ Requires macOS 15+ and Swift 6.0+.
 | **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
 | **OpenRouter** | `openai/gpt-4o-mini` | `https://openrouter.ai/api/v1` |
 | **OpenAI-Compatible** | `gpt-4o-mini` | *(you provide the URL)* |
+| **Ollama** | `qwen3-vl:2b` | `http://localhost:11434/v1` |
+
+### Local Ollama
+
+Chaos connects to Ollama as an optional local provider; it does not bundle or
+manage the Ollama runtime. Install and start Ollama separately, then pull the
+default lightweight vision model:
+
+```bash
+ollama pull qwen3-vl:2b
+```
+
+Select **Ollama** in Chaos Settings. No API key is required.
 
 ## Features
 
