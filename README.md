@@ -48,7 +48,7 @@ Requires macOS 15+ and Swift 6.0+.
 
 Chaos connects to Ollama as an optional local provider; it does not bundle or
 manage the Ollama runtime. Install and start Ollama separately, then pull the
-default lightweight vision model:
+default lightweight vision model. `qwen3-vl` requires Ollama `0.12.7+`.
 
 ```bash
 ollama pull qwen3-vl:2b

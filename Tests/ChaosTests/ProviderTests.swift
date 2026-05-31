@@ -64,6 +64,20 @@ final class ProviderTests: XCTestCase {
     }
 
     @MainActor
+    func testPresetProviderIgnoresLegacyCustomBaseURL() {
+        let state = AppState()
+        state.config = AppConfig(provider: "openai", baseURL: "https://legacy-proxy.example/v1")
+        XCTAssertEqual(state.resolvedBaseURL, "https://api.openai.com/v1")
+    }
+
+    @MainActor
+    func testOpenAICompatibleUsesCustomBaseURL() {
+        let state = AppState()
+        state.config = AppConfig(provider: "openai-compatible", baseURL: "https://custom.example/v1")
+        XCTAssertEqual(state.resolvedBaseURL, "https://custom.example/v1")
+    }
+
+    @MainActor
     func testOllamaDoesNotRequireAPIKeyToStart() throws {
         let watchURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -44,6 +44,9 @@ final class AppState {
     }
 
     var resolvedBaseURL: String {
+        guard resolvedProvider.allowsCustomBaseURL else {
+            return resolvedProvider.defaultBaseURL ?? ""
+        }
         let b = config.baseURL?.trimmingCharacters(in: .whitespaces) ?? ""
         return b.isEmpty ? (resolvedProvider.defaultBaseURL ?? "") : b
     }
