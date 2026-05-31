@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="Chaos is a native macOS menu bar app that turns anonymous screenshots into a searchable archive."
+    >
+    <title>Chaos — Your screenshots, quietly filed.</title>
+    <link
+      rel="icon"
+      type="image/png"
+      href="../Chaos/Resources/Assets.xcassets/AppIcon.appiconset/icon_32x32.png"
+    >
+    <style>
+      :root {
+        /* Replace these stacks here if a hosted brand font is added later. */
+        --font-primary: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        --font-display: "Iowan Old Style", "Baskerville", "Times New Roman", serif;
+        --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+        --color-canvas: #faf9f5;
+        --color-card: #ffffff;
+        --color-muted-surface: #f5f0e8;
+        --color-ink: #141413;
+        --color-warm-ink: #1f1e1b;
+        --color-body: #3d3d3a;
+        --color-muted: #6c6a64;
+        --color-soft: #8e8b82;
+        --color-rule: #d5cfc4;
+        --color-rule-light: #ebe6df;
+        --color-coral: #cc785c;
+        --color-coral-hover: #b8694f;
+        --color-dark: #1a1918;
+        --color-success: #4da664;
+
+        --space-xs: 0.25rem;
+        --space-sm: 0.5rem;
+        --space-md: 1rem;
+        --space-lg: 1.5rem;
+        --space-xl: 2rem;
+        --space-2xl: 3rem;
+        --space-3xl: 5rem;
+        --radius-sm: 0.375rem;
+        --radius-md: 0.625rem;
+        --radius-lg: 0.875rem;
+        --page-width: 1180px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        color: var(--color-body);
+        background-color: var(--color-canvas);
+        background-image:
+          radial-gradient(rgba(20, 20, 19, 0.055) 0.65px, transparent 0.65px),
+          linear-gradient(110deg, rgba(204, 120, 92, 0.035), transparent 34%);
+        background-size: 4px 4px, 100% 100%;
+        font-family: var(--font-primary);
+        font-size: 15px;
+        line-height: 1.65;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      button,
+      a {
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--color-coral);
+        outline-offset: 4px;
+      }
+
+      .page-shell {
+        width: min(calc(100% - 2rem), var(--page-width));
+        margin: 0 auto;
+      }
+
+      .masthead {
+        border-bottom: 1px solid var(--color-rule);
+      }
+
+      .masthead-inner {
+        display: flex;
+        align-items: center;
+        min-height: 47px;
+        gap: 0.7rem;
+      }
+
+      .small-caps {
+        color: var(--color-ink);
+        font-size: 0.63rem;
+        font-weight: 650;
+        letter-spacing: 0.14em;
+        line-height: 1.3;
+        text-transform: uppercase;
+      }
+
+      .masthead .separator {
+        color: var(--color-rule);
+      }
+
+      .masthead-spacer {
+        flex: 1;
+      }
+
+      .text-link {
+        color: var(--color-muted);
+        text-decoration: none;
+        transition: color 160ms ease;
+      }
+
+      .text-link:hover {
+        color: var(--color-coral);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.18fr) minmax(280px, 0.82fr);
+        gap: clamp(2rem, 6vw, 6.5rem);
+        align-items: end;
+        padding: clamp(4rem, 10vw, 7.75rem) 0 2.25rem;
+      }
+
+      .edition-note {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        color: var(--color-coral);
+        margin-bottom: var(--space-lg);
+      }
+
+      .edition-note::before {
+        width: 2.25rem;
+        height: 1px;
+        background: var(--color-coral);
+        content: "";
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 780px;
+        margin-bottom: var(--space-lg);
+        color: var(--color-warm-ink);
+        font-family: var(--font-display);
+        font-size: clamp(3.7rem, 8vw, 7.4rem);
+        font-weight: 400;
+        letter-spacing: -0.07em;
+        line-height: 0.9;
+      }
+
+      h1 em {
+        color: var(--color-coral);
+        font-weight: 400;
+      }
+
+      .hero-copy {
+        max-width: 620px;
+        margin-bottom: var(--space-xl);
+        color: var(--color-muted);
+        font-size: clamp(1rem, 1.5vw, 1.12rem);
+      }
+
+      .hero-actions,
+      .install-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.8rem;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        gap: 0.5rem;
+        padding: 0.7rem 1.1rem;
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        line-height: 1;
+        text-decoration: none;
+        text-transform: uppercase;
+        transition:
+          background-color 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease,
+          transform 160ms ease;
+      }
+
+      .button:hover {
+        transform: translateY(-2px);
+      }
+
+      .button-primary {
+        color: white;
+        background: var(--color-coral);
+      }
+
+      .button-primary:hover {
+        background: var(--color-coral-hover);
+      }
+
+      .button-secondary {
+        color: var(--color-ink);
+        border-color: var(--color-rule);
+        background: rgba(255, 255, 255, 0.45);
+      }
+
+      .button-secondary:hover {
+        border-color: var(--color-coral);
+        color: var(--color-coral);
+      }
+
+      .hero-aside {
+        padding-bottom: 0.7rem;
+        border-top: 1px solid var(--color-rule);
+      }
+
+      .hero-aside-row {
+        display: grid;
+        grid-template-columns: 84px 1fr;
+        gap: 1rem;
+        padding: 1rem 0;
+        border-bottom: 1px solid var(--color-rule-light);
+      }
+
+      .hero-aside p {
+        margin-bottom: 0;
+        color: var(--color-muted);
+        font-family: var(--font-display);
+        font-size: 1rem;
+        font-style: italic;
+        line-height: 1.35;
+      }
+
+      .hero-aside .metric {
+        color: var(--color-ink);
+        font-family: var(--font-display);
+        font-size: 1.9rem;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+
+      .rule {
+        height: 1px;
+        border: 0;
+        margin: 0;
+        background: var(--color-rule);
+      }
+
+      .demo-section {
+        padding: var(--space-lg) 0 var(--space-3xl);
+      }
+
+      .section-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: var(--space-md);
+        color: var(--color-muted);
+      }
+
+      .section-meta p {
+        margin: 0;
+      }
+
+      .demo-frame {
+        position: relative;
+        overflow: hidden;
+        padding: clamp(0.5rem, 1.2vw, 0.85rem);
+        border: 1px solid var(--color-rule);
+        border-radius: var(--radius-lg);
+        background: rgba(255, 255, 255, 0.68);
+        box-shadow: 0 20px 55px rgba(20, 20, 19, 0.09);
+      }
+
+      video {
+        display: block;
+        width: 100%;
+        border-radius: var(--radius-md);
+        background: var(--color-muted-surface);
+      }
+
+      .features {
+        padding: var(--space-3xl) 0;
+      }
+
+      .section-heading {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+        gap: 2rem;
+        align-items: end;
+        margin-bottom: var(--space-2xl);
+      }
+
+      h2 {
+        max-width: 780px;
+        margin-bottom: 0;
+        color: var(--color-warm-ink);
+        font-family: var(--font-display);
+        font-size: clamp(2.5rem, 5vw, 4.8rem);
+        font-weight: 400;
+        letter-spacing: -0.06em;
+        line-height: 0.98;
+      }
+
+      .section-heading p {
+        margin-bottom: 0;
+        color: var(--color-muted);
+        font-family: var(--font-display);
+        font-size: 1.1rem;
+        font-style: italic;
+        line-height: 1.45;
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border-top: 1px solid var(--color-rule);
+      }
+
+      .feature-card {
+        min-height: 250px;
+        padding: 1.25rem 1.3rem 1.45rem;
+        border-bottom: 1px solid var(--color-rule);
+        background: rgba(255, 255, 255, 0.35);
+        transition:
+          background-color 180ms ease,
+          transform 180ms ease;
+      }
+
+      .feature-card + .feature-card {
+        border-left: 1px solid var(--color-rule);
+      }
+
+      .feature-card:hover {
+        background: rgba(255, 255, 255, 0.8);
+        transform: translateY(-4px);
+      }
+
+      .feature-icon {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        margin: 0.4rem 0 2.7rem;
+        color: var(--color-coral);
+        border: 1px solid var(--color-rule);
+        border-radius: 50%;
+        background: var(--color-canvas);
+      }
+
+      .feature-icon svg {
+        width: 23px;
+        height: 23px;
+        stroke: currentColor;
+      }
+
+      h3 {
+        margin-bottom: 0.45rem;
+        color: var(--color-ink);
+        font-family: var(--font-display);
+        font-size: 1.65rem;
+        font-weight: 400;
+        letter-spacing: -0.035em;
+        line-height: 1;
+      }
+
+      .feature-card p {
+        max-width: 320px;
+        margin-bottom: 0;
+        color: var(--color-muted);
+        font-size: 0.9rem;
+      }
+
+      .workflow {
+        display: grid;
+        grid-template-columns: 0.68fr 1.32fr;
+        gap: clamp(2rem, 6vw, 7rem);
+        padding: var(--space-3xl) 0;
+      }
+
+      .workflow-copy p {
+        max-width: 360px;
+        margin-top: var(--space-md);
+        color: var(--color-muted);
+      }
+
+      .workflow-list {
+        border-top: 1px solid var(--color-rule);
+      }
+
+      .workflow-step {
+        display: grid;
+        grid-template-columns: 48px minmax(120px, 0.5fr) 1fr;
+        gap: 1rem;
+        align-items: baseline;
+        padding: 1.1rem 0;
+        border-bottom: 1px solid var(--color-rule);
+      }
+
+      .workflow-number {
+        color: var(--color-coral);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+      }
+
+      .workflow-name {
+        color: var(--color-ink);
+        font-family: var(--font-display);
+        font-size: 1.45rem;
+        letter-spacing: -0.03em;
+      }
+
+      .workflow-detail {
+        color: var(--color-muted);
+        font-size: 0.88rem;
+      }
+
+      .install {
+        display: grid;
+        grid-template-columns: 1fr minmax(320px, 0.86fr);
+        gap: clamp(2rem, 5vw, 5rem);
+        margin: var(--space-3xl) auto;
+        padding: clamp(1.5rem, 4vw, 3rem);
+        color: var(--color-canvas);
+        border-radius: var(--radius-lg);
+        background:
+          linear-gradient(125deg, rgba(204, 120, 92, 0.14), transparent 42%),
+          var(--color-dark);
+      }
+
+      .install h2 {
+        color: var(--color-canvas);
+        font-size: clamp(2.65rem, 5vw, 4.7rem);
+      }
+
+      .install-copy p {
+        max-width: 560px;
+        margin: 1rem 0 0;
+        color: rgba(250, 249, 245, 0.66);
+      }
+
+      .terminal {
+        align-self: center;
+        overflow: hidden;
+        border: 1px solid rgba(250, 249, 245, 0.18);
+        border-radius: var(--radius-md);
+        background: rgba(0, 0, 0, 0.16);
+      }
+
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.6rem 0.8rem;
+        border-bottom: 1px solid rgba(250, 249, 245, 0.12);
+      }
+
+      .terminal-code {
+        display: block;
+        overflow-x: auto;
+        padding: 1rem;
+        color: rgba(250, 249, 245, 0.88);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        line-height: 1.8;
+        white-space: pre;
+      }
+
+      .copy-button {
+        padding: 0;
+        color: rgba(250, 249, 245, 0.68);
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        transition: color 160ms ease;
+      }
+
+      .copy-button:hover {
+        color: var(--color-canvas);
+      }
+
+      footer {
+        border-top: 1px solid var(--color-rule);
+      }
+
+      .footer-inner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        min-height: 74px;
+        color: var(--color-muted);
+      }
+
+      .footer-inner img {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+      }
+
+      .footer-inner p {
+        margin: 0;
+      }
+
+      .footer-spacer {
+        flex: 1;
+      }
+
+      .reveal {
+        animation: reveal 640ms ease both;
+      }
+
+      .delay-1 {
+        animation-delay: 90ms;
+      }
+
+      .delay-2 {
+        animation-delay: 180ms;
+      }
+
+      .delay-3 {
+        animation-delay: 270ms;
+      }
+
+      @keyframes reveal {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @media (max-width: 780px) {
+        .masthead-date,
+        .masthead-date + .separator,
+        .masthead-edition,
+        .masthead-edition + .separator {
+          display: none;
+        }
+
+        .hero,
+        .section-heading,
+        .workflow,
+        .install {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          gap: var(--space-xl);
+          padding-top: 4.25rem;
+        }
+
+        h1 {
+          font-size: clamp(4rem, 18vw, 6rem);
+        }
+
+        .feature-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .feature-card {
+          min-height: 0;
+        }
+
+        .feature-card + .feature-card {
+          border-left: 0;
+        }
+
+        .feature-icon {
+          margin-bottom: 2rem;
+        }
+
+        .workflow-step {
+          grid-template-columns: 36px 1fr;
+          gap: 0.65rem;
+        }
+
+        .workflow-detail {
+          grid-column: 2;
+        }
+
+        .footer-inner {
+          flex-wrap: wrap;
+          gap: 0.7rem;
+          padding: 1rem 0;
+        }
+
+        .footer-spacer {
+          display: none;
+        }
+
+        .footer-inner .text-link {
+          margin-left: auto;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="page-shell masthead-inner">
+        <span class="small-caps">Chaos</span>
+        <span class="separator">·</span>
+        <span class="small-caps masthead-edition">Daily Edition</span>
+        <span class="separator">·</span>
+        <span class="small-caps masthead-date">For macOS 15+</span>
+        <span class="masthead-spacer"></span>
+        <a class="small-caps text-link" href="#install">Install</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-shell hero">
+        <div>
+          <p class="small-caps edition-note reveal">A quiet filing desk for your Mac</p>
+          <h1 class="reveal delay-1">Your screenshots, <em>quietly filed.</em></h1>
+          <p class="hero-copy reveal delay-2">
+            Chaos watches for new screenshots, asks your preferred vision model what
+            they contain, and files them under names you can recognize later.
+          </p>
+          <div class="hero-actions reveal delay-3">
+            <a class="button button-primary" href="#install">Install with Homebrew</a>
+            <a class="button button-secondary" href="#demo">
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M4 2.8a1 1 0 0 1 1.52-.85l8 5.2a1 1 0 0 1 0 1.7l-8 5.2A1 1 0 0 1 4 13.2V2.8Z"/>
+              </svg>
+              Watch 29-second demo
+            </a>
+          </div>
+        </div>
+
+        <aside class="hero-aside reveal delay-3" aria-label="Chaos product notes">
+          <div class="hero-aside-row">
+            <span class="small-caps">Before</span>
+            <p>Screenshot 2026-05-30 at 14.23.45.png</p>
+          </div>
+          <div class="hero-aside-row">
+            <span class="small-caps">Filed as</span>
+            <p>terminal-git-log_143022.png</p>
+          </div>
+          <div class="hero-aside-row">
+            <span class="small-caps">Status</span>
+            <div>
+              <span class="metric">Local</span>
+              <p>Your files stay on your Mac.</p>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="page-shell demo-section" id="demo" aria-labelledby="demo-label">
+        <div class="section-meta">
+          <p class="small-caps" id="demo-label">Fig. 1 — Chaos at work</p>
+          <p class="small-caps">29 seconds</p>
+        </div>
+        <div class="demo-frame">
+          <video
+            controls
+            playsinline
+            preload="metadata"
+            poster="demo-preview.png"
+            aria-label="A short demo showing Chaos naming and filing a screenshot"
+          >
+            <source src="demo.mp4" type="video/mp4">
+            Your browser does not support embedded video.
+          </video>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section class="page-shell features" aria-labelledby="features-title">
+        <div class="section-heading">
+          <h2 id="features-title">Your screenshots should not become a second inbox.</h2>
+          <p>
+            Take the screenshot and keep moving. Chaos handles the filing while the
+            thought is still fresh.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.4">
+                <path d="m4 16 8-8 4 4 4-4"/>
+                <path d="M4 20h16M4 4h7"/>
+              </svg>
+            </div>
+            <p class="small-caps">01 · Read</p>
+            <h3>Names with meaning.</h3>
+            <p>
+              A vision model turns an anonymous timestamp into a compact,
+              searchable filename.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.4">
+                <path d="M3 7.5h7l2 2h9v9.5H3z"/>
+                <path d="M3 7.5V5h6l2 2"/>
+              </svg>
+            </div>
+            <p class="small-caps">02 · File</p>
+            <h3>Filed as they arrive.</h3>
+            <p>
+              Send screenshots into an output folder, optionally grouped by day
+              or month.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <div class="feature-icon">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.4">
+                <circle cx="12" cy="12" r="8"/>
+                <path d="M12 4v16M4 12h16M6.5 6.5l11 11M17.5 6.5l-11 11"/>
+              </svg>
+            </div>
+            <p class="small-caps">03 · Choose</p>
+            <h3>Your preferred model.</h3>
+            <p>
+              Use OpenAI, SiliconRouter, OpenRouter, Ollama, or another
+              OpenAI-compatible service.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <hr class="rule">
+
+      <section class="page-shell workflow" aria-labelledby="workflow-title">
+        <div class="workflow-copy">
+          <p class="small-caps">The filing flow</p>
+          <h2 id="workflow-title">From capture to archive.</h2>
+          <p>
+            A small background routine does the repetitive part without
+            interrupting the work that produced the screenshot.
+          </p>
+        </div>
+
+        <div class="workflow-list">
+          <div class="workflow-step">
+            <span class="workflow-number">01</span>
+            <span class="workflow-name">Capture</span>
+            <span class="workflow-detail">A new macOS screenshot lands in your watched folder.</span>
+          </div>
+          <div class="workflow-step">
+            <span class="workflow-number">02</span>
+            <span class="workflow-name">Read</span>
+            <span class="workflow-detail">Your configured vision model suggests a short description.</span>
+          </div>
+          <div class="workflow-step">
+            <span class="workflow-number">03</span>
+            <span class="workflow-name">Rename</span>
+            <span class="workflow-detail">Chaos sanitizes the slug and applies your filename template.</span>
+          </div>
+          <div class="workflow-step">
+            <span class="workflow-number">04</span>
+            <span class="workflow-name">File</span>
+            <span class="workflow-detail">The image moves into an archive you can search from Finder.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-shell install" id="install" aria-labelledby="install-title">
+        <div class="install-copy">
+          <p class="small-caps">Start filing</p>
+          <h2 id="install-title">Give your screenshots a proper home.</h2>
+          <p>
+            Chaos is a native menu bar app for Apple Silicon Macs running macOS
+            15 or later.
+          </p>
+        </div>
+
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span class="small-caps">Terminal</span>
+            <button
+              class="small-caps copy-button"
+              type="button"
+              data-copy-command
+              aria-live="polite"
+            >
+              Copy command
+            </button>
+          </div>
+          <code class="terminal-code">brew tap michaelmjhhhh/chaos
+brew install --cask chaos</code>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="page-shell footer-inner">
+        <img
+          src="../Chaos/Resources/Assets.xcassets/AppIcon.appiconset/icon_32x32@2x.png"
+          alt=""
+          width="28"
+          height="28"
+        >
+        <p class="small-caps">Chaos · Daily Edition</p>
+        <span class="footer-spacer"></span>
+        <a class="small-caps text-link" href="https://github.com/michaelmjhhhh/Chaos">GitHub</a>
+      </div>
+    </footer>
+
+    <script>
+      const copyButton = document.querySelector("[data-copy-command]");
+      const command = "brew tap michaelmjhhhh/chaos\nbrew install --cask chaos";
+
+      const fallbackCopy = () => {
+        const textArea = document.createElement("textarea");
+        textArea.value = command;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "fixed";
+        textArea.style.opacity = "0";
+        document.body.appendChild(textArea);
+        textArea.select();
+        const copied = document.execCommand("copy");
+        textArea.remove();
+        return copied;
+      };
+
+      copyButton.addEventListener("click", async () => {
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(command);
+          } else if (!fallbackCopy()) {
+            throw new Error("Copy command is unavailable");
+          }
+          copyButton.textContent = "Copied";
+          window.setTimeout(() => {
+            copyButton.textContent = "Copy command";
+          }, 1800);
+        } catch {
+          if (fallbackCopy()) {
+            copyButton.textContent = "Copied";
+            window.setTimeout(() => {
+              copyButton.textContent = "Copy command";
+            }, 1800);
+          } else {
+            copyButton.textContent = "Select command above";
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
