@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
@@ -152,18 +154,41 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var heroColumn: some View {
-        HeroCard(
-            stage: appState.currentStage,
-            currentFile: appState.currentFile,
-            thumbnailPath: latestThumbnailPath,
-            proposedSlug: proposedSlug,
-            elapsedSeconds: heroElapsed,
-            includesClipboard: appState.resolvedCopyToClipboard
-        )
-        .dropDestination(for: URL.self) { urls, _ in
-            appState.processManualURLs(urls)
-            return !ImageIntake.acceptedURLs(from: urls).isEmpty
+        VStack(alignment: .leading, spacing: Theme.sMed) {
+            HeroCard(
+                stage: appState.currentStage,
+                currentFile: appState.currentFile,
+                thumbnailPath: latestThumbnailPath,
+                proposedSlug: proposedSlug,
+                elapsedSeconds: heroElapsed,
+                includesClipboard: appState.resolvedCopyToClipboard
+            )
+            .dropDestination(for: URL.self) { urls, _ in
+                appState.processManualURLs(urls)
+                return !ImageIntake.acceptedURLs(from: urls).isEmpty
+            }
+
+            Button(action: organizeExistingScreenshots) {
+                Label("Organize Existing Screenshots", systemImage: "photo.on.rectangle.angled")
+                    .font(Theme.button)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.coral)
         }
+    }
+
+    private func organizeExistingScreenshots() {
+        let panel = NSOpenPanel()
+        panel.title = "Organize Existing Screenshots"
+        panel.message = "Choose images to rename and move into your Chaos output folder."
+        panel.prompt = "Organize"
+        panel.allowsMultipleSelection = true
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .webP]
+
+        guard panel.runModal() == .OK else { return }
+        appState.processManualURLs(panel.urls)
     }
 
     private var latestThumbnailPath: String? {
