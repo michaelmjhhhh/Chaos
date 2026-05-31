@@ -58,7 +58,7 @@ brew install --cask chaos
 ## Start filing
 
 1. Open **Settings** with `Cmd+,`.
-2. Choose a provider and enter your API key.
+2. Choose a provider and enter an API key if it requires one.
 3. Pick the folder to watch and the folder where renamed images should land.
 4. Select **Start Watching** on the dashboard.
 5. Take a screenshot. Chaos names and files it automatically.
@@ -89,6 +89,19 @@ Chaos speaks the OpenAI-compatible vision API format, so you can choose the serv
 | **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
 | **OpenRouter** | `openai/gpt-4o-mini` | `https://openrouter.ai/api/v1` |
 | **OpenAI-Compatible** | `gpt-4o-mini` | You provide the URL |
+| **Ollama** | `qwen3-vl:2b` | `http://localhost:11434/v1` |
+
+### Local Ollama
+
+Chaos connects to Ollama as an optional local provider; it does not bundle or
+manage the Ollama runtime. Install and start Ollama separately, then pull the
+default lightweight vision model. `qwen3-vl` requires Ollama `0.12.7+`.
+
+```bash
+ollama pull qwen3-vl:2b
+```
+
+Select **Ollama** in Chaos Settings. No API key is required.
 
 ## How it works
 

@@ -2,6 +2,38 @@ import XCTest
 @testable import Chaos
 
 final class FileProcessorTests: XCTestCase {
+    func testHealthCheckRejectsEmptyBaseURL() async {
+        let processor = FileProcessor()
+        let healthy = await processor.checkAPIHealth(
+            baseURL: "",
+            apiKey: "test-key",
+            model: "test-model"
+        )
+        XCTAssertFalse(healthy)
+    }
+
+    func testGenerateSlugRejectsInvalidProviderBaseURLs() async {
+        let client = VisionAPIClient()
+
+        for baseURL in ["", "ftp://example.test", "https:///missing-host"] {
+            do {
+                _ = try await client.generateSlug(
+                    imageBase64: "image",
+                    baseURL: baseURL,
+                    apiKey: "test-key",
+                    model: "test-model",
+                    language: .en
+                )
+                XCTFail("Expected invalid provider base URL error for \(baseURL)")
+            } catch {
+                XCTAssertEqual(
+                    error.localizedDescription,
+                    "API error: Invalid provider base URL"
+                )
+            }
+        }
+    }
+
     func testReportsRenamingAfterAnalysis() async throws {
         let temporaryDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

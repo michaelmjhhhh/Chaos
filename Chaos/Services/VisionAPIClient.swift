@@ -34,7 +34,7 @@ actor VisionAPIClient {
             "stream": false,
         ]
 
-        let url = URL(string: "\(baseURL.trimmingSuffix("/"))/chat/completions")!
+        let url = try endpointURL(baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -63,7 +63,7 @@ actor VisionAPIClient {
             "stream": false,
         ]
 
-        let url = URL(string: "\(baseURL.trimmingSuffix("/"))/chat/completions")!
+        let url = try endpointURL(baseURL: baseURL)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -92,6 +92,20 @@ actor VisionAPIClient {
                 "Return only the filename slug."
             )
         }
+    }
+
+    private func endpointURL(baseURL: String) throws -> URL {
+        guard let url = URL(string: baseURL),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              let host = url.host,
+              !host.isEmpty else {
+            throw ChaosError.apiError("Invalid provider base URL")
+        }
+
+        return url
+            .appendingPathComponent("chat")
+            .appendingPathComponent("completions")
     }
 
     private func parseSlugResponse(_ data: Data) throws -> String {
@@ -140,14 +154,5 @@ actor VisionAPIClient {
         }
 
         throw ChaosError.apiError("Empty response from provider")
-    }
-}
-
-private extension String {
-    func trimmingSuffix(_ suffix: String) -> String {
-        if hasSuffix(suffix) {
-            return String(dropLast(suffix.count))
-        }
-        return self
     }
 }
