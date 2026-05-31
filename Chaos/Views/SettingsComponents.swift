@@ -24,6 +24,7 @@ struct SettingsCard<Content: View>: View {
             content
         }
         .padding(Theme.sMed)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.surfaceCard)
         .clipShape(.rect(cornerRadius: Theme.r10))
         .overlay {
@@ -52,7 +53,7 @@ struct SettingsCardHeader: View {
             if let subtitle {
                 Text(subtitle)
                     .font(Theme.bodySm)
-                    .foregroundStyle(Theme.textSoft)
+                    .foregroundStyle(Theme.textMuted)
             }
         }
     }
@@ -64,9 +65,14 @@ struct SettingsBadge: View {
     let tint: Color
 
     var body: some View {
-        Label(text, systemImage: systemImage)
+        HStack(spacing: Theme.sMicro) {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+
+            Text(text)
+                .foregroundStyle(Theme.textBody)
+        }
             .font(Theme.caption)
-            .foregroundStyle(tint)
             .padding(.horizontal, Theme.sSmall)
             .padding(.vertical, Theme.sMicro)
             .background(tint.opacity(0.1))
@@ -91,15 +97,18 @@ struct SettingsConnectionResult: View {
             VStack(alignment: .leading, spacing: Theme.sMicro) {
                 Text(message)
                     .font(Theme.bodySm)
-                    .foregroundStyle(messageTint)
+                    .foregroundStyle(messageForeground)
 
                 if status == "FAIL" {
                     Text(failureHint)
                         .font(Theme.bodySm)
-                        .foregroundStyle(Theme.textSoft)
+                        .foregroundStyle(Theme.textMuted)
+                        .textSelection(.enabled)
                 }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
     }
 
     private var message: String {
@@ -119,11 +128,19 @@ struct SettingsConnectionResult: View {
         }
     }
 
+    private var messageForeground: Color {
+        status == "Checking..." ? Theme.textMuted : Theme.textBody
+    }
+
     private var iconName: String {
         switch status {
         case "OK": "checkmark.circle.fill"
         case "FAIL": "xmark.circle.fill"
         default: "info.circle.fill"
         }
+    }
+
+    private var accessibilityDescription: String {
+        status == "FAIL" ? "\(message) \(failureHint)" : message
     }
 }

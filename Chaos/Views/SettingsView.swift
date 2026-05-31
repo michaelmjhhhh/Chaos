@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Environment(AppState.self) private var appState
     @State private var testResult: String?
     @State private var isTesting = false
+    @State private var configRevision = 0
 
     var body: some View {
         ScrollView {
@@ -23,6 +24,8 @@ struct SettingsView: View {
         .frame(minWidth: 560, minHeight: 680)
         .onChange(of: appState.config) {
             appState.saveConfig()
+            configRevision += 1
+            testResult = nil
         }
     }
 
@@ -34,7 +37,7 @@ struct SettingsView: View {
 
             Text("Connect a naming model and tune your filing workflow.")
                 .font(Theme.body)
-                .foregroundStyle(Theme.textSoft)
+                .foregroundStyle(Theme.textMuted)
         }
     }
 
@@ -53,7 +56,7 @@ struct SettingsView: View {
                 HStack(alignment: .center, spacing: Theme.sSmall) {
                     Text(appState.resolvedProvider.summary)
                         .font(Theme.bodySm)
-                        .foregroundStyle(Theme.textSoft)
+                        .foregroundStyle(Theme.textMuted)
 
                     Spacer()
 
@@ -66,17 +69,25 @@ struct SettingsView: View {
 
                 if appState.resolvedProvider.requiresAPIKey {
                     VStack(alignment: .leading, spacing: Theme.sMicro) {
+                        Text("API Key")
+                            .font(Theme.caption)
+                            .foregroundStyle(Theme.textMuted)
+
                         SecureField("API Key", text: apiKeyBinding)
                             .font(Theme.code)
                             .textFieldStyle(.roundedBorder)
 
-                        Text("Stored for the selected remote provider and used for its requests.")
+                        Text("One saved key is reused across remote providers. Update it when you switch services.")
                             .font(Theme.bodySm)
-                            .foregroundStyle(Theme.textSoft)
+                            .foregroundStyle(Theme.textMuted)
                     }
                 }
 
                 VStack(alignment: .leading, spacing: Theme.sMicro) {
+                    Text("Model")
+                        .font(Theme.caption)
+                        .foregroundStyle(Theme.textMuted)
+
                     TextField(
                         "Model",
                         text: modelBinding,
@@ -87,11 +98,15 @@ struct SettingsView: View {
 
                     Text("Default model: \(appState.resolvedProvider.defaultModel)")
                         .font(Theme.bodySm)
-                        .foregroundStyle(Theme.textSoft)
+                        .foregroundStyle(Theme.textMuted)
                 }
 
                 if appState.resolvedProvider.allowsCustomBaseURL {
                     VStack(alignment: .leading, spacing: Theme.sMicro) {
+                        Text("Base URL")
+                            .font(Theme.caption)
+                            .foregroundStyle(Theme.textMuted)
+
                         TextField("Base URL", text: baseURLBinding, prompt: Text("https://...").font(Theme.code))
                             .font(Theme.code)
                             .textFieldStyle(.roundedBorder)
@@ -170,6 +185,10 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: Theme.sMicro) {
+                    Text("Filename Template")
+                        .font(Theme.caption)
+                        .foregroundStyle(Theme.textMuted)
+
                     TextField(
                         "Filename Template",
                         text: filenameTemplateBinding,
@@ -180,7 +199,7 @@ struct SettingsView: View {
 
                     Text("Tokens: {slug}  {date}  {time}")
                         .font(Theme.codeSm)
-                        .foregroundStyle(Theme.textSoft)
+                        .foregroundStyle(Theme.textMuted)
                 }
 
                 Picker("Subfolders", selection: subfolderRuleBinding) {
@@ -238,7 +257,7 @@ struct SettingsView: View {
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                Button("Choose...") {
+                Button("Choose…") {
                     let panel = NSOpenPanel()
                     panel.canChooseFiles = false
                     panel.canChooseDirectories = true
@@ -264,10 +283,11 @@ struct SettingsView: View {
     private func testAPI() {
         isTesting = true
         testResult = nil
+        let revision = configRevision
         Task {
             await appState.checkAPIHealth()
             isTesting = false
-            testResult = appState.apiStatus
+            testResult = configRevision == revision ? appState.apiStatus : nil
         }
     }
 
