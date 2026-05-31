@@ -47,6 +47,18 @@ final class AppState {
         return b.isEmpty ? (resolvedProvider.defaultBaseURL ?? "") : b
     }
 
+    var resolvedAPIKey: String {
+        resolvedProvider.requiresAPIKey ? (config.apiKey ?? "") : ""
+    }
+
+    var startupValidationError: String? {
+        guard resolvedProvider.requiresAPIKey,
+              resolvedAPIKey.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return nil
+        }
+        return "API key not configured"
+    }
+
     var resolvedWatchDir: String {
         let w = config.watchDir?.trimmingCharacters(in: .whitespaces) ?? ""
         return w.isEmpty ? NSHomeDirectory() + "/Desktop" : w
@@ -116,10 +128,17 @@ final class AppState {
         try? configService.save(config)
     }
 
+    func selectProvider(_ provider: Provider) {
+        guard provider != resolvedProvider else { return }
+        config.provider = provider.rawValue
+        config.model = nil
+        config.baseURL = nil
+    }
+
     func start() {
         guard !isWatching else { return }
-        guard let apiKey = config.apiKey, !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else {
-            watcherStatus = .error("API key not configured")
+        if let startupValidationError {
+            watcherStatus = .error(startupValidationError)
             return
         }
 
@@ -162,7 +181,7 @@ final class AppState {
         apiStatus = "Checking..."
         let healthy = await processor.checkAPIHealth(
             baseURL: resolvedBaseURL,
-            apiKey: config.apiKey ?? "",
+            apiKey: resolvedAPIKey,
             model: resolvedModel
         )
         apiStatus = healthy ? "OK" : "FAIL"
@@ -227,7 +246,7 @@ final class AppState {
                 screenshotURL: url,
                 outputDir: URL(fileURLWithPath: resolvedOutputDir),
                 baseURL: resolvedBaseURL,
-                apiKey: config.apiKey ?? "",
+                apiKey: resolvedAPIKey,
                 model: resolvedModel,
                 language: resolvedLanguage,
                 copyToClipboard: resolvedCopyToClipboard,
