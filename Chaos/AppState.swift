@@ -26,6 +26,7 @@ final class AppState {
     @ObservationIgnored private let processor = FileProcessor()
     @ObservationIgnored private let configService = ConfigService()
     @ObservationIgnored private let historyStore = HistoryStore()
+    @ObservationIgnored private var apiHealthCheckID = UUID()
 
     var isWatching: Bool {
         if case .running = watcherStatus { return true }
@@ -177,14 +178,25 @@ final class AppState {
         currentStage = nil
     }
 
-    func checkAPIHealth() async {
+    @discardableResult
+    func checkAPIHealth() async -> String? {
+        let healthCheckID = UUID()
+        apiHealthCheckID = healthCheckID
         apiStatus = "Checking..."
         let healthy = await processor.checkAPIHealth(
             baseURL: resolvedBaseURL,
             apiKey: resolvedAPIKey,
             model: resolvedModel
         )
-        apiStatus = healthy ? "OK" : "FAIL"
+        guard apiHealthCheckID == healthCheckID else { return nil }
+        let result = healthy ? "OK" : "FAIL"
+        apiStatus = result
+        return result
+    }
+
+    func invalidateAPIHealthCheck() {
+        apiHealthCheckID = UUID()
+        apiStatus = "N/A"
     }
 
     private func handleNewFile(url: URL, watcherStartedAt: Date) async {

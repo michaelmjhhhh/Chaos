@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct SettingsView: View {
@@ -24,6 +25,7 @@ struct SettingsView: View {
         .frame(minWidth: 560, minHeight: 680)
         .onChange(of: appState.config) {
             appState.saveConfig()
+            appState.invalidateAPIHealthCheck()
             configRevision += 1
             testResult = nil
         }
@@ -112,9 +114,14 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
 
                         if appState.resolvedProvider.requiresBaseURL && (appState.config.baseURL ?? "").isEmpty {
-                            Label("Required for OpenAI-Compatible", systemImage: "exclamationmark.triangle.fill")
+                            HStack(spacing: Theme.sMicro) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(Theme.warning)
+
+                                Text("Required for OpenAI-Compatible")
+                                    .foregroundStyle(Theme.textBody)
+                            }
                                 .font(Theme.bodySm)
-                                .foregroundStyle(Theme.warning)
                         }
                     }
                 } else {
@@ -138,7 +145,7 @@ struct SettingsView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
-                        .background(isTesting ? Theme.coral.opacity(0.6) : Theme.coral)
+                        .background(isTesting ? Theme.ink.opacity(0.6) : Theme.ink)
                         .clipShape(.rect(cornerRadius: Theme.r6))
                     }
                     .buttonStyle(.plain)
@@ -285,10 +292,26 @@ struct SettingsView: View {
         testResult = nil
         let revision = configRevision
         Task {
-            await appState.checkAPIHealth()
+            let result = await appState.checkAPIHealth()
             isTesting = false
-            testResult = configRevision == revision ? appState.apiStatus : nil
+            guard configRevision == revision, let result else { return }
+            testResult = result
+            announceConnectionResult(result)
         }
+    }
+
+    private func announceConnectionResult(_ status: String) {
+        let announcement = status == "OK"
+            ? "Connection successful."
+            : "Connection failed. \(appState.resolvedProvider.connectionFailureHint)"
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: announcement,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ]
+        )
     }
 
     // MARK: - Bindings
