@@ -76,7 +76,7 @@ final class ProviderTests: XCTestCase {
         XCTAssertNil(state.startupValidationError)
 
         state.start()
-        XCTAssertNotEqual(state.watcherStatus, .error("API key not configured"))
+        XCTAssertEqual(state.watcherStatus, .running)
         state.stop()
     }
 
