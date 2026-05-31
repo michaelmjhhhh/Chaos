@@ -6,6 +6,7 @@ enum Provider: String, CaseIterable, Identifiable {
     case deepseek
     case openrouter
     case openaiCompatible = "openai-compatible"
+    case ollama
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum Provider: String, CaseIterable, Identifiable {
         case .deepseek: "DeepSeek"
         case .openrouter: "OpenRouter"
         case .openaiCompatible: "OpenAI-Compatible"
+        case .ollama: "Ollama"
         }
     }
 
@@ -26,6 +28,7 @@ enum Provider: String, CaseIterable, Identifiable {
         case .deepseek: "https://api.deepseek.com"
         case .openrouter: "https://openrouter.ai/api/v1"
         case .openaiCompatible: nil
+        case .ollama: "http://localhost:11434/v1"
         }
     }
 
@@ -36,6 +39,37 @@ enum Provider: String, CaseIterable, Identifiable {
         case .deepseek: "deepseek-v4-flash"
         case .openrouter: "openai/gpt-4o-mini"
         case .openaiCompatible: "gpt-4o-mini"
+        case .ollama: "qwen3-vl:2b"
+        }
+    }
+
+    var requiresAPIKey: Bool {
+        self != .ollama
+    }
+
+    var allowsCustomBaseURL: Bool {
+        self == .openaiCompatible
+    }
+
+    var connectionKind: String {
+        self == .ollama ? "Local" : "Remote"
+    }
+
+    var summary: String {
+        switch self {
+        case .siliconrouter: "SiliconRouter hosted API."
+        case .openai: "OpenAI hosted API."
+        case .deepseek: "DeepSeek hosted API."
+        case .openrouter: "OpenRouter hosted API."
+        case .openaiCompatible: "Custom OpenAI-compatible endpoint."
+        case .ollama: "Local vision model served by Ollama."
+        }
+    }
+
+    var connectionFailureHint: String {
+        switch self {
+        case .ollama: "Start Ollama, then run: ollama pull qwen3-vl:2b"
+        default: "Check your API key and network connection."
         }
     }
 
