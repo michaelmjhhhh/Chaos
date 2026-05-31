@@ -236,8 +236,8 @@ final class AppState {
         }
     }
 
-    func processDroppedURLs(_ urls: [URL]) {
-        let accepted = urls.filter(ImageIntake.accepts)
+    func processManualURLs(_ urls: [URL]) {
+        let accepted = ImageIntake.acceptedURLs(from: urls)
         guard !accepted.isEmpty else { return }
 
         Task {

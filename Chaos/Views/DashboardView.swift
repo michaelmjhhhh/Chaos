@@ -161,8 +161,8 @@ struct DashboardView: View {
             includesClipboard: appState.resolvedCopyToClipboard
         )
         .dropDestination(for: URL.self) { urls, _ in
-            appState.processDroppedURLs(urls)
-            return urls.contains(where: ImageIntake.accepts)
+            appState.processManualURLs(urls)
+            return !ImageIntake.acceptedURLs(from: urls).isEmpty
         }
     }
 
