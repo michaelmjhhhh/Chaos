@@ -11,4 +11,18 @@ final class ImageIntakeTests: XCTestCase {
     func testRejectsUnsupportedExtensions() {
         XCTAssertFalse(ImageIntake.accepts(url: URL(fileURLWithPath: "notes.pdf")))
     }
+
+    func testAcceptedURLsFiltersUnsupportedFilesAndPreservesSelectionOrder() {
+        let urls = [
+            URL(fileURLWithPath: "first.PNG"),
+            URL(fileURLWithPath: "notes.pdf"),
+            URL(fileURLWithPath: "second.heic"),
+            URL(fileURLWithPath: "third.webp"),
+        ]
+
+        XCTAssertEqual(
+            ImageIntake.acceptedURLs(from: urls).map(\.lastPathComponent),
+            ["first.PNG", "second.heic", "third.webp"]
+        )
+    }
 }

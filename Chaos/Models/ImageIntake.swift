@@ -8,4 +8,8 @@ enum ImageIntake {
     static func accepts(url: URL) -> Bool {
         supportedExtensions.contains(url.pathExtension.lowercased())
     }
+
+    static func acceptedURLs(from urls: [URL]) -> [URL] {
+        urls.filter(accepts)
+    }
 }
