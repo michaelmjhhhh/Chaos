@@ -1,29 +1,14 @@
-<p align="center">
-  <img src="Chaos/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png" width="112" alt="Chaos app icon">
-</p>
+# Chaos
 
-<h1 align="center">Chaos</h1>
+**Turn a desktop full of anonymous screenshots into a searchable archive.**
 
-<p align="center">
-  <strong>Turn a desktop full of anonymous screenshots into a searchable archive.</strong>
-</p>
+A native macOS menu bar app that watches for screenshots, asks a vision model what they contain, and files them under useful names while you keep working.
 
-<p align="center">
-  A native macOS menu bar app that watches for screenshots, asks a vision model what they contain,<br>
-  and files them under useful names while you keep working.
-</p>
+`Screenshot 2026-05-30 at 14.23.45.png` → `terminal-git-log_143022.png`
 
-<p align="center">
-  <code>Screenshot 2026-05-30 at 14.23.45.png</code><br>
-  ↓<br>
-  <code>terminal-git-log_143022.png</code>
-</p>
+[![Watch the 29-second Chaos demo](docs/demo-preview.png)](docs/demo.mp4)
 
-<video src="docs/demo.mp4" autoplay loop muted playsinline controls></video>
-
-<p align="center">
-  <a href="docs/demo.mp4"><strong>Watch the 29-second demo</strong></a>
-</p>
+**[Watch the 29-second demo →](docs/demo.mp4)**
 
 ## Your screenshots should not become a second inbox
 
