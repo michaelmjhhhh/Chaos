@@ -1,10 +1,49 @@
-# Chaos
+<p align="center">
+  <img src="Chaos/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png" width="92" alt="Chaos app icon">
+</p>
 
-A native macOS menu bar app that watches for screenshots, sends them to a vision AI model, and renames them with descriptive filenames — automatically.
+<h1 align="center">Chaos</h1>
 
-`Screenshot 2026-05-30 at 14.23.45.png` → `terminal-git-log_143022.png`
+<p align="center">
+  <strong>Turn a desktop full of anonymous screenshots into a searchable archive.</strong>
+</p>
 
-<video src="docs/demo.mp4" autoplay loop muted playsinline></video>
+<p align="center">
+  A native macOS menu bar app that watches for screenshots, asks a vision model what they contain,<br>
+  and files them under useful names while you keep working.
+</p>
+
+<p align="center">
+  <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple_Silicon-native-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
+  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6.0-F05138?style=flat-square&amp;logo=swift&amp;logoColor=white">
+</p>
+
+<p align="center">
+  <code>Screenshot 2026-05-30 at 14.23.45.png</code> → <code>terminal-git-log_143022.png</code>
+</p>
+
+<p align="center">
+  <a href="docs/demo.mp4">
+    <img src="docs/demo-preview.png" alt="Watch the 29-second Chaos demo">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="docs/demo.mp4">Watch the 29-second demo →</a></strong>
+</p>
+
+## Your screenshots should not become a second inbox
+
+Screenshots are effortless to capture and surprisingly painful to retrieve. A week later, the image you need is buried among dozens of files named with timestamps and nothing else.
+
+Chaos quietly fixes that as the files arrive:
+
+- **Names screenshots by meaning** using your chosen vision model
+- **Files them automatically** into an output folder, with optional daily or monthly subfolders
+- **Accepts existing images** through drag and drop when your backlog needs attention
+- **Keeps a searchable local history** of recent processing, including failures and retries
+- **Stays out of the way** in the menu bar until you need it
 
 ## Install
 
@@ -13,9 +52,65 @@ brew tap michaelmjhhhh/chaos
 brew install --cask chaos
 ```
 
-Apple Silicon only. Not yet notarized — macOS will ask you to approve it in **System Settings → Privacy & Security** after first launch.
+> [!NOTE]
+> Chaos currently supports Apple Silicon Macs running macOS 15 or later. The app is not yet notarized, so macOS will ask you to approve it in **System Settings → Privacy & Security** after the first launch.
 
-### Build from source
+## Start filing
+
+1. Open **Settings** with `Cmd+,`.
+2. Choose a provider and enter your API key.
+3. Pick the folder to watch and the folder where renamed images should land.
+4. Select **Start Watching** on the dashboard.
+5. Take a screenshot. Chaos names and files it automatically.
+
+Need to clean up an existing image? Drop a PNG, JPEG, HEIC, or WebP onto the dashboard and it enters the same filing flow.
+
+## Built for the way screenshots accumulate
+
+| Capability | What it gives you |
+| --- | --- |
+| **AI-generated names** | Files you can recognize in Finder and find with Spotlight |
+| **Filename templates** | A consistent format using `{slug}`, `{date}`, and `{time}` |
+| **Automatic organization** | Optional day or month folders without manual sorting |
+| **Local history** | The latest 500 attempts, searchable across launches |
+| **Retry flow** | A quick way to reprocess failed images after fixing a provider or file issue |
+| **Clipboard handoff** | An option to copy the renamed image back to your clipboard |
+| **Screenshot guards** | Processing limited to new macOS screenshots when folder watching is active |
+| **Editorial dashboard** | Live progress, recent filings, latency, throughput, and success rate |
+
+## Bring your preferred model
+
+Chaos speaks the OpenAI-compatible vision API format, so you can choose the service that fits your workflow.
+
+| Provider | Default model | Base URL |
+| --- | --- | --- |
+| **SiliconRouter** | `gemini-3-flash-preview` | `https://api.siliconrouter.com/v1` |
+| **OpenAI** | `gpt-4o-mini` | `https://api.openai.com/v1` |
+| **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
+| **OpenRouter** | `openai/gpt-4o-mini` | `https://openrouter.ai/api/v1` |
+| **OpenAI-Compatible** | `gpt-4o-mini` | You provide the URL |
+
+## How it works
+
+```text
+New screenshot
+      │
+      ▼
+ScreenshotGuard ── rejects unrelated files
+      │
+      ▼
+VisionAPIClient ── asks your configured model for a short description
+      │
+      ▼
+SlugSanitizer ─── makes the result filesystem-safe
+      │
+      ▼
+FileRenamer ───── applies your template, avoids collisions, and files the image
+```
+
+Existing files in the watched directory are ignored. Chaos only processes screenshots created after the watcher starts. Images you explicitly drop onto the dashboard bypass the screenshot filename guard and enter the same naming pipeline.
+
+## Build from source
 
 ```bash
 swift build
@@ -23,82 +118,14 @@ swift build
 open .build/Chaos.app
 ```
 
-Requires macOS 15+ and Swift 6.0+.
+Requires macOS 15 or later and Swift 6.0 or later.
 
-## Setup
+## Configuration
 
-1. Open **Settings** (Cmd+,)
-2. Pick a provider and enter your API key
-3. Set your watch and output directories
-4. Hit **Start Watching** on the dashboard
-5. Take a screenshot — it gets renamed and filed automatically
+Chaos stores its configuration at:
 
-## Providers
-
-| Provider | Default Model | Base URL |
-|----------|--------------|----------|
-| **SiliconRouter** | `gemini-3-flash-preview` | `https://api.siliconrouter.com/v1` |
-| **OpenAI** | `gpt-4o-mini` | `https://api.openai.com/v1` |
-| **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
-| **OpenRouter** | `openai/gpt-4o-mini` | `https://openrouter.ai/api/v1` |
-| **OpenAI-Compatible** | `gpt-4o-mini` | *(you provide the URL)* |
-
-## Features
-
-- **Menu bar** — always-on popover with start/stop, recent files, and output folder access
-- **Dashboard** — live status, success rate, avg/p95 latency, recent activity
-- **History** — searchable table of all processed files with error filtering; persists the latest 500 across launches
-- **Drop intake** — drag an existing PNG, JPEG, HEIC, or WebP onto the dashboard to process it
-- **Organization** — filename templates (`{slug}_{time}`) plus optional daily or monthly output folders
-- **Clipboard** — optionally copies the renamed image to your clipboard
-- **Safety guards** — only touches files matching macOS screenshot patterns (prefix, PNG header, size, recency)
-- **Sound feedback** — plays the Glass sound on success
-- **Language** — English or Chinese filename generation
-
-## How it works
-
-1. **DirectoryWatcher** monitors your watch folder via `DispatchSource` file system events
-2. **ScreenshotGuard** validates the file — right prefix (`Screenshot`, `屏幕快照`, `截屏`), PNG header, 20 KB–25 MB, created after the watcher started
-3. **VisionAPIClient** sends the image to your configured model
-4. **SlugSanitizer** cleans the response into a filesystem-safe slug
-5. **FileRenamer** moves it to your output directory with collision avoidance
-
-Existing files in the watch directory are ignored — only new screenshots trigger processing.
-
-## Config
-
-```
+```text
 ~/Library/Application Support/chaos/config.json
 ```
 
-On first launch, Chaos migrates an existing `vibe-shot` CLI config if one exists.
-
-## Project structure
-
-```
-Chaos/
-├── ChaosApp.swift             # App entry — WindowGroup + MenuBarExtra + Settings
-├── AppState.swift             # @Observable central state and business logic
-├── Models/
-│   ├── AppConfig.swift        # Codable config (shared JSON schema with CLI)
-│   ├── Provider.swift         # Provider enum with defaults
-│   ├── ProcessingEvent.swift  # Status and stage enums
-│   └── RecentFile.swift       # Processed file record
-├── Services/
-│   ├── ConfigService.swift    # Load/save config.json
-│   ├── DirectoryWatcher.swift # DispatchSource file system monitor
-│   ├── ScreenshotGuard.swift  # Eligibility checks
-│   ├── VisionAPIClient.swift  # OpenAI-compatible vision API
-│   ├── SlugSanitizer.swift    # Filename slug cleanup
-│   ├── FileProcessor.swift    # Pipeline orchestrator
-│   ├── FileRenamer.swift      # Move with collision avoidance
-│   ├── ClipboardService.swift # NSPasteboard image copy
-│   └── SoundService.swift     # Glass sound feedback
-└── Views/
-    ├── ContentView.swift      # Tab container (Dashboard / History)
-    ├── DashboardView.swift    # Live metrics and status
-    ├── PipelineView.swift     # Processed files table
-    ├── SettingsView.swift     # Preferences (Cmd+,)
-    ├── MenuBarView.swift      # Menu bar popover + icon
-    └── Theme.swift            # Design tokens (colors, type, spacing)
-```
+On first launch, Chaos imports an existing `vibe-shot` CLI configuration when one is available.
