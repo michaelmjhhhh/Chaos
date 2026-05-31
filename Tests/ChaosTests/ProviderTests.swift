@@ -64,11 +64,20 @@ final class ProviderTests: XCTestCase {
     }
 
     @MainActor
-    func testOllamaDoesNotRequireAPIKeyToStart() {
+    func testOllamaDoesNotRequireAPIKeyToStart() throws {
+        let watchURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: watchURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: watchURL) }
+
         let state = AppState()
-        state.config = AppConfig(provider: "ollama")
+        state.config = AppConfig(provider: "ollama", watchDir: watchURL.path)
         XCTAssertEqual(state.resolvedAPIKey, "")
         XCTAssertNil(state.startupValidationError)
+
+        state.start()
+        XCTAssertNotEqual(state.watcherStatus, .error("API key not configured"))
+        state.stop()
     }
 
     @MainActor

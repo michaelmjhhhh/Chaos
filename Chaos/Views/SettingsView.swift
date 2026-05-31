@@ -169,7 +169,7 @@ struct SettingsView: View {
     // MARK: - Bindings
 
     private var providerBinding: Binding<Provider> {
-        Binding(get: { appState.resolvedProvider }, set: { appState.config.provider = $0.rawValue })
+        Binding(get: { appState.resolvedProvider }, set: { appState.selectProvider($0) })
     }
     private var apiKeyBinding: Binding<String> {
         Binding(get: { appState.config.apiKey ?? "" }, set: { appState.config.apiKey = $0.isEmpty ? nil : $0 })
