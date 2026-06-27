@@ -9,6 +9,7 @@ actor VisionAPIClient {
 
     func generateSlug(
         imageBase64: String,
+        mimeType: String = "image/jpeg",
         baseURL: String,
         apiKey: String,
         model: String,
@@ -26,11 +27,13 @@ actor VisionAPIClient {
                         ["type": "text", "text": userPrompt],
                         [
                             "type": "image_url",
-                            "image_url": ["url": "data:image/png;base64,\(imageBase64)"],
+                            "image_url": ["url": "data:\(mimeType);base64,\(imageBase64)"],
                         ],
                     ] as [[String: Any]],
                 ] as [String: Any],
             ] as [[String: Any]],
+            // A slug is a handful of words; capping output keeps inference fast.
+            "max_tokens": 32,
             "stream": false,
         ]
 
@@ -40,13 +43,14 @@ actor VisionAPIClient {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        request.timeoutInterval = 30
 
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw ChaosError.apiError("HTTP \(statusCode)")
+            throw ChaosError.httpStatus(statusCode)
         }
 
         return try parseSlugResponse(data)

@@ -36,6 +36,16 @@ struct PipelineCard: View {
                     .padding(.trailing, 8)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if file.isError {
+            return "Failed to name \(file.originalName). \(file.resultText)"
+        }
+        let name = file.newName.isEmpty ? file.originalName : file.newName
+        return "Filed as \(name), from \(file.originalName)"
     }
 
     @ViewBuilder

@@ -8,6 +8,8 @@ struct HeroCard: View {
     let proposedSlug: String?
     let elapsedSeconds: TimeInterval
     let includesClipboard: Bool
+    var isWatching: Bool = false
+    var hasFiledBefore: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var typedCount: Int = 0
@@ -23,7 +25,7 @@ struct HeroCard: View {
         }
         .padding(Theme.sLg)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .frame(minHeight: 310)
+        .frame(minHeight: 240)
         .background(Theme.surfaceCard)
         .clipShape(.rect(cornerRadius: Theme.r10))
         .overlay(
@@ -52,20 +54,34 @@ struct HeroCard: View {
 
     @ViewBuilder
     private var idleView: some View {
-        VStack(spacing: Theme.sMed) {
+        VStack(spacing: Theme.sSmall) {
             Spacer()
-            EditorialIcon.Shutter(size: 80, color: Theme.textSoft.opacity(0.6))
-            Text("No captures yet. The page will fill as you work.")
-                .font(Theme.serifItalicSm)
+            EditorialIcon.Shutter(size: 56, color: Theme.textSoft.opacity(0.45))
+
+            Text(idlePrimary)
+                .font(Theme.serifItalicLg)
                 .foregroundStyle(Theme.textMuted)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 280)
-            Text("Drop an image to file it.")
-                .smallCaps()
+
+            Text(idleSecondary)
+                .font(Theme.bodySm)
                 .foregroundStyle(Theme.textSoft)
+                .multilineTextAlignment(.center)
             Spacer()
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(idlePrimary) \(idleSecondary)")
+    }
+
+    private var idlePrimary: String {
+        isWatching ? "Watching for screenshots." : "Ready when you are."
+    }
+
+    private var idleSecondary: String {
+        isWatching
+            ? "Take one with ⌘⇧4, or drop an image here."
+            : "Press Start Watching, then take a screenshot."
     }
 
     @ViewBuilder

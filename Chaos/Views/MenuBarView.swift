@@ -58,6 +58,7 @@ struct MenuBarView: View {
                         .padding(.vertical, 3)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(f.isError ? "Failed" : "Filed"): \(f.newName.isEmpty ? f.originalName : f.newName)")
                 }
             }
 
@@ -68,6 +69,10 @@ struct MenuBarView: View {
             }
             menuLink("gear", "Settings…") {
                 openSettings()
+            }
+            menuLink("questionmark.circle", "Help & Getting Started") {
+                NSApp.activate(ignoringOtherApps: true)
+                appState.showHelp = true
             }
 
             sep
@@ -134,6 +139,11 @@ struct MenuBarIcon: View {
     let status: WatcherStatus
 
     var body: some View {
+        icon.accessibilityLabel("Chaos — \(statusLabel)")
+    }
+
+    @ViewBuilder
+    private var icon: some View {
         switch status {
         case .stopped:
             Image(systemName: "camera.viewfinder")
@@ -144,6 +154,15 @@ struct MenuBarIcon: View {
                 .symbolRenderingMode(.palette)
         case .error:
             Image(systemName: "exclamationmark.triangle")
+        }
+    }
+
+    private var statusLabel: String {
+        switch status {
+        case .stopped: "not watching"
+        case .starting: "starting"
+        case .running: "watching"
+        case .error: "needs attention"
         }
     }
 }

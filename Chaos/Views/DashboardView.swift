@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 struct DashboardView: View {
     @Environment(AppState.self) private var appState
-    @State private var uptimeTick = false
+    @Environment(\.openSettings) private var openSettings
     @State private var ellipsisCount = 0
 
     var body: some View {
@@ -12,11 +12,14 @@ struct DashboardView: View {
             PaperBackground()
 
             VStack(spacing: 0) {
-                Masthead(sessionNumber: appState.session.sessionNumber, date: Date())
+                Masthead(status: appState.watcherStatus, date: Date())
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Theme.sSec) {
                         headlineStrip
+                        if let err = appState.lastError {
+                            errorBanner(err)
+                        }
                         bodyColumns
                     }
                     .padding(.horizontal, Theme.sSec)
@@ -28,9 +31,6 @@ struct DashboardView: View {
         }
         .frame(minWidth: 760, minHeight: 540)
         .onAppear {
-            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-                uptimeTick.toggle()
-            }
             Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { _ in
                 ellipsisCount = (ellipsisCount + 1) % 4
             }
@@ -39,11 +39,8 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var headlineStrip: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: Theme.sSmall) {
-                headlineText
-                datelineText
-            }
+        HStack(alignment: .center) {
+            headlineText
             Spacer()
             controlButton
         }
@@ -99,18 +96,6 @@ struct DashboardView: View {
     }
 
     @ViewBuilder
-    private var datelineText: some View {
-        let _ = uptimeTick
-        let uptime: String = {
-            guard let t = appState.watcherStartedAt, appState.isWatching else { return "—" }
-            return fmtUptime(t)
-        }()
-        Text("RUNNING \(uptime) · PROVIDER · \(appState.resolvedProvider.displayName.uppercased())")
-            .smallCaps()
-            .foregroundStyle(Theme.textSoft)
-    }
-
-    @ViewBuilder
     private var controlButton: some View {
         if appState.isWatching {
             Button { appState.stop() } label: {
@@ -125,6 +110,7 @@ struct DashboardView: View {
                 .clipShape(.rect(cornerRadius: Theme.r6))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Stop watching for screenshots")
         } else {
             Button { appState.start() } label: {
                 HStack(spacing: 6) {
@@ -138,6 +124,59 @@ struct DashboardView: View {
                 .clipShape(.rect(cornerRadius: Theme.r6))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Start watching for screenshots")
+        }
+    }
+
+    /// A plain-language, actionable banner for the most recent failure. Gives a
+    /// non-technical user the next step (retry / open settings) instead of a stack trace.
+    @ViewBuilder
+    private func errorBanner(_ error: FriendlyError) -> some View {
+        HStack(alignment: .top, spacing: Theme.sSmall) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Theme.error)
+
+            Text(error.message)
+                .font(Theme.bodySm)
+                .foregroundStyle(Theme.textBody)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: Theme.sSmall)
+
+            if let label = error.action.label {
+                Button(label) { handleRecovery(error.action) }
+                    .controlSize(.small)
+            }
+
+            Button {
+                appState.lastError = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.textSoft)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(Theme.sMed)
+        .background(Theme.error.opacity(0.08))
+        .clipShape(.rect(cornerRadius: Theme.r8))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.r8).stroke(Theme.error.opacity(0.25), lineWidth: 0.5)
+        }
+    }
+
+    private func handleRecovery(_ action: RecoveryAction) {
+        switch action {
+        case .openSettings:
+            openSettings()
+        case .retry, .checkInternet:
+            if let failed = appState.recentFiles.first(where: { $0.isError }) {
+                appState.retry(failed)
+            }
+            appState.lastError = nil
+        case .none:
+            appState.lastError = nil
         }
     }
 
@@ -161,7 +200,9 @@ struct DashboardView: View {
                 thumbnailPath: latestThumbnailPath,
                 proposedSlug: proposedSlug,
                 elapsedSeconds: heroElapsed,
-                includesClipboard: appState.resolvedCopyToClipboard
+                includesClipboard: appState.resolvedCopyToClipboard,
+                isWatching: appState.isWatching,
+                hasFiledBefore: !appState.recentFiles.isEmpty
             )
             .dropDestination(for: URL.self) { urls, _ in
                 appState.processManualURLs(urls)
@@ -209,78 +250,37 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var editorialColumn: some View {
-        VStack(alignment: .leading, spacing: Theme.sSec) {
-            todaysReadingBlock
-            numbersBlock
-            if !appState.vocabularyToday.isEmpty {
-                vocabularyBlock
-            }
-            directoriesBlock
+        VStack(alignment: .leading, spacing: Theme.sLg) {
+            todayBlock
+            EditorialRule()
+            foldersBlock
         }
     }
 
     @ViewBuilder
-    private var todaysReadingBlock: some View {
-        VStack(alignment: .leading, spacing: Theme.sMed) {
-            Text("TODAY'S READING").smallCaps().foregroundStyle(Theme.textMuted)
-            Sparkline(
-                values: appState.latencyHistory,
-                caption: "Fig. 1 — Latency",
-                lastValueText: appState.latencyHistory.last.map { String(format: "%.1fs", $0) }
-            )
-            Sparkline(
-                values: appState.hourlyThroughput.map(Double.init),
-                caption: "Fig. 2 — Throughput, hourly",
-                lastValueText: nonZeroThroughputLabel
-            )
-            Sparkline(
-                values: appState.successRateHistory,
-                caption: "Fig. 3 — Success rate",
-                lastValueText: appState.successRateHistory.last.map { String(format: "%.0f%%", $0 * 100) }
-            )
-        }
-    }
-
-    private var nonZeroThroughputLabel: String? {
-        let total = appState.hourlyThroughput.reduce(0, +)
-        guard total > 0 else { return nil }
-        return "\(total) today"
-    }
-
-    @ViewBuilder
-    private var numbersBlock: some View {
+    private var todayBlock: some View {
         VStack(alignment: .leading, spacing: Theme.sSmall) {
-            Text("NUMBERS").smallCaps().foregroundStyle(Theme.textMuted)
-            HStack(spacing: Theme.sMed) {
-                MetricFigure(value: "\(appState.totalProcessed)", label: "Processed")
-                MetricFigure(value: "\(appState.successes)", label: "Successful")
+            Text("TODAY").smallCaps().foregroundStyle(Theme.textMuted)
+            HStack(spacing: Theme.sLg) {
+                MetricFigure(value: "\(appState.successes)", label: "Filed")
                 MetricFigure(
                     value: "\(appState.errors)",
                     label: "Errors",
                     accent: appState.errors > 0 ? Theme.error : nil
                 )
             }
-            Text("AVG \(fmtDur(appState.avgLatency)) · P95 \(fmtDur(appState.p95Latency))")
-                .font(Theme.codeSm)
-                .foregroundStyle(Theme.textSoft)
+            if appState.avgLatency > 0 {
+                Text("Avg \(fmtDur(appState.avgLatency)) per image")
+                    .font(Theme.codeSm)
+                    .foregroundStyle(Theme.textSoft)
+            }
         }
     }
 
     @ViewBuilder
-    private var vocabularyBlock: some View {
-        VStack(alignment: .leading, spacing: Theme.sSmall) {
-            Text("TODAY'S VOCABULARY").smallCaps().foregroundStyle(Theme.textMuted)
-            Text(appState.vocabularyToday.joined(separator: ", ") + ".")
-                .font(Theme.serifItalicLg)
-                .foregroundStyle(Theme.warmInk)
-                .lineLimit(3)
-        }
-    }
-
-    @ViewBuilder
-    private var directoriesBlock: some View {
+    private var foldersBlock: some View {
         VStack(alignment: .leading, spacing: Theme.sMed) {
-            Text("DIRECTORIES").smallCaps().foregroundStyle(Theme.textMuted)
+            Text("FOLDERS").smallCaps().foregroundStyle(Theme.textMuted)
             directoryRow(icon: AnyView(EditorialIcon.Eye(size: 16)),
                          label: "WATCH",
                          path: appState.resolvedWatchDir)
@@ -309,25 +309,19 @@ struct DashboardView: View {
     private var colophon: some View {
         VStack(spacing: 0) {
             EditorialRule()
-            HStack(spacing: Theme.sLg) {
-                Text("API · \(appState.apiStatus.uppercased())")
-                    .smallCaps()
-                    .foregroundStyle(apiColor)
-                Text("PROVIDER · \(appState.resolvedProvider.displayName.uppercased())")
-                    .smallCaps()
-                    .foregroundStyle(Theme.textSoft)
-                Text("MODEL · \(appState.resolvedModel.uppercased())")
-                    .smallCaps()
+            HStack(spacing: Theme.sSmall) {
+                Circle().fill(apiColor).frame(width: 5, height: 5)
+                Text("\(appState.resolvedProvider.displayName) · \(appState.resolvedModel)")
+                    .font(Theme.captionSm)
+                    .tracking(0.4)
                     .foregroundStyle(Theme.textSoft)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Spacer()
-                if let t = appState.watcherStartedAt, appState.isWatching {
-                    let _ = uptimeTick
-                    Text("\(fmtUptime(t)) UPTIME")
-                        .smallCaps()
-                        .foregroundStyle(Theme.textSoft)
-                }
+                Button("Settings") { openSettings() }
+                    .buttonStyle(.plain)
+                    .font(Theme.captionSm)
+                    .foregroundStyle(Theme.coral)
             }
             .padding(.horizontal, Theme.sSec)
             .padding(.vertical, Theme.sSmall)
@@ -346,13 +340,6 @@ struct DashboardView: View {
         if s <= 0 { return "—" }
         if s < 1 { return String(format: "%.0fms", s * 1000) }
         return String(format: "%.1fs", s)
-    }
-
-    private func fmtUptime(_ d: Date) -> String {
-        let i = Int(Date().timeIntervalSince(d))
-        let h = i / 3600, m = (i % 3600) / 60, s = i % 60
-        if h > 0 { return "\(h)H \(m)M" }
-        return "\(m)M \(s)S"
     }
 
     private func abbrev(_ p: String) -> String {

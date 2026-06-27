@@ -3,37 +3,49 @@ import AppKit
 
 struct PipelineView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var searchText: String = ""
     @State private var filter: FiledColumn.Filter = .all
     @State private var selection: RecentFile.ID?
     @FocusState private var searchFocused: Bool
 
-    @Namespace private var pipelineNS
-
-    private let liveColumnWidth: CGFloat = 140
+    @State private var renameTarget: RecentFile?
+    @State private var renameText: String = ""
 
     var body: some View {
         ZStack(alignment: .top) {
             PaperBackground()
 
             VStack(spacing: 0) {
-                Masthead(sessionNumber: appState.session.sessionNumber, date: Date())
+                Masthead(status: appState.watcherStatus, date: Date())
 
                 VStack(alignment: .leading, spacing: Theme.sMed) {
-                    headerRow
-                    boardBody
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    if let live = liveLine {
+                        liveStrip(live)
+                    }
+
+                    FiledColumn(
+                        files: appState.recentFiles,
+                        searchText: $searchText,
+                        filter: $filter,
+                        selection: $selection,
+                        searchFocused: $searchFocused,
+                        onRetry: appState.retry,
+                        onRevert: appState.revert,
+                        onRename: beginRename
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
                 .padding(.horizontal, Theme.sLg)
-                .padding(.top, Theme.sLg)
+                .padding(.top, Theme.sMed)
                 .padding(.bottom, Theme.sLg)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(minWidth: 760, minHeight: 540)
+        .sheet(item: $renameTarget) { file in
+            renameSheet(for: file)
+        }
         .focusable()
         .focusEffectDisabled()
         .onKeyPress(.return) {
@@ -47,92 +59,83 @@ struct PipelineView: View {
         }
     }
 
-    @ViewBuilder
-    private var headerRow: some View {
-        VStack(alignment: .leading, spacing: Theme.sSmall) {
-            HStack(spacing: Theme.sMed) {
-                headerLabel("CAUGHT", isActive: activeColumn == .caught)
-                    .frame(width: liveColumnWidth, alignment: .leading)
-                headerLabel("READING", isActive: activeColumn == .reading)
-                    .frame(width: liveColumnWidth, alignment: .leading)
-                headerLabel("SETTING", isActive: activeColumn == .setting)
-                    .frame(width: liveColumnWidth, alignment: .leading)
-                headerLabel("FILED", isActive: false)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            EditorialRule()
-        }
-    }
+    // MARK: - Live strip
 
-    @ViewBuilder
-    private func headerLabel(_ title: String, isActive: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).smallCaps().foregroundStyle(Theme.ink)
-            Rectangle()
-                .fill(isActive ? Theme.coral : Color.clear)
-                .frame(height: 1)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: isActive)
-        }
-    }
-
-    @ViewBuilder
-    private var boardBody: some View {
-        HStack(alignment: .top, spacing: Theme.sMed) {
-            liveCardArea(active: activeColumn == .caught)
-                .frame(width: liveColumnWidth, alignment: .top)
-            liveCardArea(active: activeColumn == .reading)
-                .frame(width: liveColumnWidth, alignment: .top)
-            liveCardArea(active: activeColumn == .setting)
-                .frame(width: liveColumnWidth, alignment: .top)
-
-            FiledColumn(
-                files: appState.recentFiles,
-                searchText: $searchText,
-                filter: $filter,
-                selection: $selection,
-                searchFocused: $searchFocused,
-                onRetry: appState.retry
-            )
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-    }
-
-    @ViewBuilder
-    private func liveCardArea(active: Bool) -> some View {
-        if active, let card = inFlightCard {
-            PipelineCard(file: card, isInFlight: true)
-                .matchedGeometryEffect(id: "inFlight", in: pipelineNS)
-                .transition(.opacity)
-        } else {
-            Text("—")
-                .font(.system(size: 16, design: .serif))
-                .foregroundStyle(Theme.ink.opacity(0.3))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 2)
-        }
-    }
-
-    private var activeColumn: PipelineStage? {
-        guard let stage = appState.currentStage else { return nil }
+    /// A single calm line describing what's happening right now, shown only while a file
+    /// is in flight. Replaces the three mostly-empty kanban columns.
+    private var liveLine: (stage: String, file: String)? {
+        guard let stage = appState.currentStage, let file = appState.currentFile else { return nil }
         switch stage {
-        case .caught: return .caught
-        case .analyzing: return .reading
-        case .renaming, .clipboard: return .setting
+        case .caught: return ("Caught", file)
+        case .analyzing: return ("Reading", file)
+        case .renaming, .clipboard: return ("Filing", file)
         case .success, .error: return nil
         }
     }
 
-    private var inFlightCard: RecentFile? {
-        guard let original = appState.currentFile else { return nil }
-        return RecentFile(
-            originalName: original,
-            newName: "",
-            path: "",
-            timestamp: Date(),
-            duration: 0,
-            result: .success
-        )
+    @ViewBuilder
+    private func liveStrip(_ live: (stage: String, file: String)) -> some View {
+        HStack(spacing: Theme.sSmall) {
+            ProgressView().controlSize(.small)
+            Text(live.stage.uppercased())
+                .font(Theme.captionSm)
+                .tracking(1)
+                .foregroundStyle(Theme.coral)
+            Text(live.file)
+                .font(Theme.codeSm)
+                .foregroundStyle(Theme.textMuted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+        }
+        .padding(.horizontal, Theme.sMed)
+        .padding(.vertical, Theme.sSmall)
+        .background(Theme.surfaceMuted)
+        .clipShape(.rect(cornerRadius: Theme.r8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(live.stage) \(live.file)")
     }
 
-    private enum PipelineStage { case caught, reading, setting }
+    // MARK: - Rename
+
+    private func beginRename(_ file: RecentFile) {
+        let current = file.newName.isEmpty ? file.originalName : file.newName
+        renameText = (current as NSString).deletingPathExtension
+        renameTarget = file
+    }
+
+    @ViewBuilder
+    private func renameSheet(for file: RecentFile) -> some View {
+        VStack(alignment: .leading, spacing: Theme.sMed) {
+            Text("Rename file")
+                .font(Theme.displayMd)
+                .foregroundStyle(Theme.warmInk)
+
+            Text("Give this screenshot a clearer name. The file extension stays the same.")
+                .font(Theme.bodySm)
+                .foregroundStyle(Theme.textMuted)
+
+            TextField("New name", text: $renameText)
+                .textFieldStyle(.roundedBorder)
+                .font(Theme.code)
+                .onSubmit { commitRename(file) }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { renameTarget = nil }
+                    .keyboardShortcut(.cancelAction)
+                Button("Rename") { commitRename(file) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(renameText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(Theme.sLg)
+        .frame(width: 380)
+        .background(Theme.canvas)
+    }
+
+    private func commitRename(_ file: RecentFile) {
+        appState.rename(file, to: renameText)
+        renameTarget = nil
+    }
 }

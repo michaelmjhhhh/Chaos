@@ -29,11 +29,11 @@ actor FileProcessor {
 
         try await waitUntilStable(url: screenshotURL)
 
-        let data = try Data(contentsOf: screenshotURL)
-        let base64 = data.base64EncodedString()
+        let prepared = VisionImage.prepare(url: screenshotURL)
 
         let rawSlug = try await apiClient.generateSlug(
-            imageBase64: base64,
+            imageBase64: prepared.base64,
+            mimeType: prepared.mimeType,
             baseURL: baseURL,
             apiKey: apiKey,
             model: model,
@@ -77,21 +77,21 @@ actor FileProcessor {
         )) ?? false
     }
 
-    private func waitUntilStable(url: URL, attempts: Int = 10, interval: TimeInterval = 0.2) async throws {
+    /// Wait until the screenshot has finished being written. Screenshots land almost
+    /// instantly, so we poll on a short interval and return the moment the size holds
+    /// steady — typically after ~0.1s rather than burning a fixed budget.
+    private func waitUntilStable(url: URL, attempts: Int = 12, interval: TimeInterval = 0.1) async throws {
         var previousSize: Int64 = -1
         let fm = FileManager.default
 
         for _ in 0..<attempts {
-            guard let attrs = try? fm.attributesOfItem(atPath: url.path),
-                  let size = attrs[.size] as? Int64 else {
-                try await Task.sleep(for: .milliseconds(Int(interval * 1000)))
-                continue
+            if let attrs = try? fm.attributesOfItem(atPath: url.path),
+               let size = attrs[.size] as? Int64 {
+                if size > 0 && size == previousSize {
+                    return
+                }
+                previousSize = size
             }
-
-            if size > 0 && size == previousSize {
-                return
-            }
-            previousSize = size
             try await Task.sleep(for: .milliseconds(Int(interval * 1000)))
         }
 

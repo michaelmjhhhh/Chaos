@@ -1,6 +1,6 @@
 import Foundation
 
-struct RecentFile: Identifiable, Codable, Equatable {
+struct RecentFile: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     let originalName: String
     let newName: String
@@ -10,7 +10,7 @@ struct RecentFile: Identifiable, Codable, Equatable {
     let duration: TimeInterval
     let result: Result
 
-    enum Result: Codable, Equatable {
+    enum Result: Codable, Equatable, Sendable {
         case success
         case error(String)
     }

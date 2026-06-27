@@ -1,6 +1,6 @@
 import Foundation
 
-struct HistoryStore {
+struct HistoryStore: Sendable {
     static let defaultHistoryURL: URL = {
         let appSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -32,9 +32,9 @@ struct HistoryStore {
             at: historyURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let data = try encoder.encode(Array(files.prefix(limit)))
+        // Compact JSON: this is a machine-read cache, not a file people edit, and the
+        // write happens after every filed screenshot.
+        let data = try JSONEncoder().encode(Array(files.prefix(limit)))
         try data.write(to: historyURL, options: .atomic)
     }
 }

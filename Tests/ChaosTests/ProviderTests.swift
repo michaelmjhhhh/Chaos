@@ -32,10 +32,31 @@ final class ProviderTests: XCTestCase {
     }
 
     func testProviderConnectionRulesRemainScopedToExpectedPresets() {
+        let keyless: Set<Provider> = [.ollama, .chaosHosted]
         for provider in Provider.allCases {
-            XCTAssertEqual(provider.requiresAPIKey, provider != .ollama, "\(provider)")
+            XCTAssertEqual(provider.requiresAPIKey, !keyless.contains(provider), "\(provider)")
             XCTAssertEqual(provider.allowsCustomBaseURL, provider == .openaiCompatible, "\(provider)")
-            XCTAssertEqual(provider.connectionKind, provider == .ollama ? "Local" : "Remote", "\(provider)")
+            let expectedKind: String
+            switch provider {
+            case .ollama: expectedKind = "Local"
+            case .chaosHosted: expectedKind = "Built-in"
+            default: expectedKind = "Remote"
+            }
+            XCTAssertEqual(provider.connectionKind, expectedKind, "\(provider)")
+        }
+    }
+
+    func testChaosHostedProviderNeedsNoKeyAndOffersNoSignup() {
+        let provider = Provider.chaosHosted
+        XCTAssertFalse(provider.requiresAPIKey)
+        XCTAssertFalse(provider.allowsCustomBaseURL)
+        XCTAssertNil(provider.signupURL)
+        XCTAssertEqual(provider.connectionKind, "Built-in")
+    }
+
+    func testEveryKeyedProviderExposesASignupLink() {
+        for provider in Provider.allCases where provider.requiresAPIKey && provider != .openaiCompatible {
+            XCTAssertNotNil(provider.signupURL, "\(provider) should offer a way to get a key")
         }
     }
 
