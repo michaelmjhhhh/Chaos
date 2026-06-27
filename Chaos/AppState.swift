@@ -61,9 +61,12 @@ final class AppState {
     }
 
     var resolvedAPIKey: String {
-        // The bundled hosted provider authenticates with a managed credential the user
-        // never sees; everything else uses the user's own key (or none for Ollama).
-        if resolvedProvider == .chaosHosted { return HostedProvider.bundledCredential }
+        // The bundled hosted provider authenticates with a managed app token plus this
+        // device's hash, so the proxy can meter the free trial per device. The user never
+        // sees either. Everything else uses the user's own key (or none for Ollama).
+        if resolvedProvider == .chaosHosted {
+            return "\(HostedProvider.bundledCredential):\(DeviceIdentity.hash)"
+        }
         return resolvedProvider.requiresAPIKey ? (config.apiKey ?? "") : ""
     }
 
