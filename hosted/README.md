@@ -44,6 +44,25 @@ curl -i -X POST "$HOST/api/chat/completions" \
 Expect `200` with `X-Chaos-Trial-Remaining: 19`. Repeat past `FREE_LIMIT` → `402`. A wrong
 `APP_TOKEN` → `401`. Temporarily set `GLOBAL_MONTHLY_LIMIT=1` to confirm the global cap.
 
+## Free-trial usage & reset
+
+```bash
+# How many free names a device has used (no increment):
+curl -s "$HOST/api/usage" -H "Authorization: Bearer $APP_TOKEN:<deviceHash>"
+# → {"used":3,"limit":3,"remaining":0,"globalSpent":5,"globalLimit":100000}
+
+# Reset that device's counter (requires ADMIN_TOKEN); add ?global=1 to also clear
+# this month's global budget counter:
+curl -s -X POST "$HOST/api/usage?global=1" \
+  -H "Authorization: Bearer $APP_TOKEN:<deviceHash>" \
+  -H "x-admin-token: $ADMIN_TOKEN"
+```
+
+The Chaos app surfaces `GET /api/usage` behind **Settings → Naming Service → Check free
+trial**. Reset is admin-only and intended for testing/ops.
+
+> Reminder: changing any env var (e.g. `FREE_LIMIT`) only takes effect after a **redeploy**.
+
 ## Local typecheck
 
 ```bash

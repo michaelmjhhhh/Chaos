@@ -1,10 +1,38 @@
 import Foundation
 
+/// Free-trial usage for the bundled hosted provider, as reported by `GET /api/usage`.
+struct HostedUsage: Decodable, Sendable, Equatable {
+    let used: Int
+    let limit: Int
+    let remaining: Int
+}
+
 actor VisionAPIClient {
     private let session: URLSession
 
     init(session: URLSession = .shared) {
         self.session = session
+    }
+
+    /// Ask the hosted proxy how much of this device's free trial is left. The base URL is
+    /// the hosted provider's (".../api"); usage lives next to chat at ".../api/usage".
+    func fetchUsage(baseURL: String, apiKey: String) async throws -> HostedUsage {
+        let trimmed = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+        guard let url = URL(string: trimmed + "/usage"),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme) else {
+            throw ChaosError.apiError("Invalid usage URL")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ChaosError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return try JSONDecoder().decode(HostedUsage.self, from: data)
     }
 
     func generateSlug(

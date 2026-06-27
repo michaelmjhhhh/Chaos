@@ -77,6 +77,10 @@ actor FileProcessor {
         )) ?? false
     }
 
+    func fetchUsage(baseURL: String, apiKey: String) async throws -> HostedUsage {
+        try await apiClient.fetchUsage(baseURL: baseURL, apiKey: apiKey)
+    }
+
     /// Wait until the screenshot has finished being written. Screenshots land almost
     /// instantly, so we poll on a short interval and return the moment the size holds
     /// steady — typically after ~0.1s rather than burning a fixed budget.

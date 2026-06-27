@@ -221,6 +221,12 @@ final class AppState {
         apiStatus = "N/A"
     }
 
+    /// Free-trial usage for the bundled hosted provider. Returns nil for other providers.
+    func fetchHostedUsage() async -> HostedUsage? {
+        guard resolvedProvider == .chaosHosted else { return nil }
+        return try? await processor.fetchUsage(baseURL: resolvedBaseURL, apiKey: resolvedAPIKey)
+    }
+
     private func handleNewFile(url: URL, watcherStartedAt: Date) async {
         currentFile = url.lastPathComponent
         currentStage = .caught
