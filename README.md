@@ -47,13 +47,29 @@ Chaos quietly fixes that as the files arrive:
 
 ## Install
 
+### Download the app (no Terminal needed)
+
+1. Download the latest **[Chaos.dmg](https://github.com/michaelmjhhhh/Chaos/releases/latest/download/Chaos.dmg)** (or browse all [Releases](https://github.com/michaelmjhhhh/Chaos/releases/latest)).
+2. Open the DMG and drag **Chaos** into your **Applications** folder.
+3. The first time you open it, macOS shows a warning that it "could not verify"
+   the developer. This is expected — Chaos is open source and ad-hoc signed, but
+   not notarized by Apple. To open it once:
+   - Double-click **Chaos** (it gets blocked the first time — that's fine).
+   - Open **System Settings → Privacy & Security**, scroll to the bottom, and
+     click **Open Anyway** next to the message about Chaos.
+   - Click **Open** to confirm. You only do this once.
+
+### Homebrew (for developers)
+
 ```bash
 brew tap michaelmjhhhh/chaos
 brew install --cask chaos
 ```
 
 > [!NOTE]
-> Chaos currently supports Apple Silicon Macs running macOS 15 or later. The app is not yet notarized, so macOS will ask you to approve it in **System Settings → Privacy & Security** after the first launch.
+> Chaos supports Apple Silicon Macs running macOS 15 or later. Because it isn't
+> notarized by Apple, the one-time **Open Anyway** step above is needed on first
+> launch — it is not required again after that.
 
 ## Start filing
 

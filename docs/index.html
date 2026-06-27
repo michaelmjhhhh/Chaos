@@ -185,6 +185,13 @@
         flex-wrap: wrap;
         align-items: center;
         gap: 0.8rem;
+        margin-top: 1.5rem;
+      }
+
+      .install-note {
+        font-size: 0.9rem;
+        line-height: 1.55;
+        color: rgba(250, 249, 245, 0.55) !important;
       }
 
       .button {
@@ -657,7 +664,7 @@
             they contain, and files them under names you can recognize later.
           </p>
           <div class="hero-actions reveal delay-3">
-            <a class="button button-primary" href="#install">Install with Homebrew</a>
+            <a class="button button-primary" href="#install">Download for macOS</a>
             <a class="button button-secondary" href="#demo">
               <svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M4 2.8a1 1 0 0 1 1.52-.85l8 5.2a1 1 0 0 1 0 1.7l-8 5.2A1 1 0 0 1 4 13.2V2.8Z"/>
@@ -808,11 +815,25 @@
             Chaos is a native menu bar app for Apple Silicon Macs running macOS
             15 or later.
           </p>
+          <div class="install-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/michaelmjhhhh/Chaos/releases/latest/download/Chaos.dmg"
+            >
+              Download for macOS (.dmg)
+            </a>
+          </div>
+          <p class="install-note">
+            No Terminal required. Drag Chaos into Applications, then open it once
+            via <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>.
+            Chaos is open source and not notarized by Apple, so macOS asks on the
+            first launch only.
+          </p>
         </div>
 
         <div class="terminal">
           <div class="terminal-bar">
-            <span class="small-caps">Terminal</span>
+            <span class="small-caps">Or install with Homebrew</span>
             <button
               class="small-caps copy-button"
               type="button"
