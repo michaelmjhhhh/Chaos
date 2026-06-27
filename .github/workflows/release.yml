@@ -1,0 +1,44 @@
+name: Release
+
+# Build the drag-to-install DMG and attach it to the GitHub Release whenever a
+# version tag (e.g. v1.0.0) is pushed. The Download buttons in the README and on the
+# landing page point at /releases/latest/download/Chaos.dmg, so each tagged release
+# automatically becomes "the latest download".
+#
+# Note: the app is ad-hoc signed, not notarized (no paid Apple Developer account), so
+# first-time users still approve it once via System Settings → Privacy & Security.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and attach the DMG to"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    runs-on: macos-15
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build DMG
+        run: ./package-dmg.sh
+
+      - name: Attach DMG to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: .build/Chaos.dmg
+          fail_on_unmatched_files: true
