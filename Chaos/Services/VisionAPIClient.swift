@@ -46,7 +46,7 @@ actor VisionAPIClient {
         guard let httpResponse = response as? HTTPURLResponse,
               (200..<300).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            throw ChaosError.apiError("HTTP \(statusCode)")
+            throw ChaosError.httpStatus(statusCode)
         }
 
         return try parseSlugResponse(data)

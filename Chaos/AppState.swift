@@ -20,7 +20,16 @@ final class AppState {
     var errors: Int = 0
     private(set) var latencies: [TimeInterval] = []
 
+    /// Plain-language description of the most recent failure, with a suggested recovery
+    /// action. Surfaced on the dashboard so non-technical users know what to do next.
+    var lastError: FriendlyError?
+
+    /// Drives the in-app Help/FAQ sheet. Set from the Help menu, the menu-bar dropdown,
+    /// or contextual “?” affordances.
+    var showHelp = false
+
     @ObservationIgnored @AppStorage("autoStart") var autoStart = false
+    @ObservationIgnored @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
 
     @ObservationIgnored private var watcher: DirectoryWatcher?
     @ObservationIgnored private let processor = FileProcessor()
@@ -52,7 +61,10 @@ final class AppState {
     }
 
     var resolvedAPIKey: String {
-        resolvedProvider.requiresAPIKey ? (config.apiKey ?? "") : ""
+        // The bundled hosted provider authenticates with a managed credential the user
+        // never sees; everything else uses the user's own key (or none for Ollama).
+        if resolvedProvider == .chaosHosted { return HostedProvider.bundledCredential }
+        return resolvedProvider.requiresAPIKey ? (config.apiKey ?? "") : ""
     }
 
     var startupValidationError: String? {
@@ -79,6 +91,10 @@ final class AppState {
 
     var resolvedCopyToClipboard: Bool {
         config.copyToClipboard ?? false
+    }
+
+    var resolvedNotifyOnComplete: Bool {
+        config.notifyOnComplete ?? false
     }
 
     var resolvedNamingPolicy: NamingPolicy {
@@ -271,6 +287,7 @@ final class AppState {
             }
 
             successes += 1
+            lastError = nil
             latencies.append(result.duration)
             if latencies.count > 100 { latencies.removeFirst() }
 
@@ -290,9 +307,18 @@ final class AppState {
 
             currentStage = .success(result.destinationURL.lastPathComponent)
             currentFile = result.destinationURL.lastPathComponent
+
+            if resolvedNotifyOnComplete {
+                NotificationService.notifySuccess(
+                    originalName: result.originalName,
+                    newName: result.destinationURL.lastPathComponent
+                )
+            }
         } catch {
             errors += 1
-            currentStage = .error(error.localizedDescription)
+            let friendly = FriendlyError(error, provider: resolvedProvider)
+            lastError = friendly
+            currentStage = .error(friendly.message)
 
             successWindow.append(0.0)
             if successWindow.count > 100 { successWindow.removeFirst() }
@@ -304,9 +330,69 @@ final class AppState {
                 sourcePath: url.path,
                 timestamp: Date(),
                 duration: 0,
-                result: .error(error.localizedDescription)
+                result: .error(friendly.message)
             )
             record(entry)
+
+            if resolvedNotifyOnComplete {
+                NotificationService.notifyError(originalName: originalName, message: friendly.message)
+            }
+        }
+    }
+
+    /// Undo a filing: move the renamed image back to where it came from and drop it from
+    /// history. Gives non-technical users a safety net for wrong names.
+    func revert(_ file: RecentFile) {
+        guard !file.path.isEmpty, !file.sourcePath.isEmpty else { return }
+        let current = URL(fileURLWithPath: file.path)
+        guard FileManager.default.fileExists(atPath: current.path) else {
+            lastError = FriendlyError(
+                message: "That file isn't where Chaos left it, so it can't be undone.",
+                action: .none
+            )
+            return
+        }
+        do {
+            try FileRenamer.revert(from: current, toOriginalPath: file.sourcePath)
+            recentFiles.removeAll { $0.id == file.id }
+            saveHistory()
+        } catch {
+            lastError = FriendlyError(message: "Couldn't undo that filing.", action: .none)
+        }
+    }
+
+    /// Correct an AI-generated name in place. Keeps the file in its current folder.
+    func rename(_ file: RecentFile, to newBaseName: String) {
+        let trimmed = newBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !file.path.isEmpty, !trimmed.isEmpty else { return }
+        let sanitized = SlugSanitizer.sanitize(trimmed)
+        guard !sanitized.isEmpty else { return }
+        let current = URL(fileURLWithPath: file.path)
+        guard FileManager.default.fileExists(atPath: current.path) else {
+            lastError = FriendlyError(
+                message: "That file isn't where Chaos left it, so it can't be renamed.",
+                action: .none
+            )
+            return
+        }
+        do {
+            let dst = try FileRenamer.rename(at: current, toBaseName: sanitized)
+            if let idx = recentFiles.firstIndex(where: { $0.id == file.id }) {
+                let old = recentFiles[idx]
+                recentFiles[idx] = RecentFile(
+                    id: old.id,
+                    originalName: old.originalName,
+                    newName: dst.lastPathComponent,
+                    path: dst.path,
+                    sourcePath: old.sourcePath,
+                    timestamp: old.timestamp,
+                    duration: old.duration,
+                    result: old.result
+                )
+                saveHistory()
+            }
+        } catch {
+            lastError = FriendlyError(message: "Couldn't rename that file.", action: .none)
         }
     }
 
@@ -315,6 +401,10 @@ final class AppState {
         if recentFiles.count > 500 {
             recentFiles = Array(recentFiles.prefix(500))
         }
+        saveHistory()
+    }
+
+    private func saveHistory() {
         do {
             try historyStore.save(recentFiles)
         } catch {

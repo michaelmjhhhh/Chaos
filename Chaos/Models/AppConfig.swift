@@ -11,6 +11,7 @@ struct AppConfig: Codable, Equatable {
     var language: String?
     var filenameTemplate: String?
     var subfolderRule: String?
+    var notifyOnComplete: Bool?
 
     enum CodingKeys: String, CodingKey {
         case provider
@@ -23,5 +24,6 @@ struct AppConfig: Codable, Equatable {
         case language
         case filenameTemplate = "filename_template"
         case subfolderRule = "subfolder_rule"
+        case notifyOnComplete = "notify_on_complete"
     }
 }

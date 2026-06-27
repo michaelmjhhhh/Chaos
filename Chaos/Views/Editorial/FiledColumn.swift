@@ -8,6 +8,8 @@ struct FiledColumn: View {
     @Binding var selection: RecentFile.ID?
     @FocusState.Binding var searchFocused: Bool
     var onRetry: (RecentFile) -> Void = { _ in }
+    var onRevert: (RecentFile) -> Void = { _ in }
+    var onRename: (RecentFile) -> Void = { _ in }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -97,6 +99,7 @@ struct FiledColumn: View {
                 .foregroundStyle(Theme.ink)
                 .focused($searchFocused)
                 .frame(maxWidth: 220)
+                .accessibilityLabel("Search filings")
             Rectangle()
                 .fill(searchFocused ? Theme.coral : Theme.rule)
                 .frame(height: searchFocused ? 1 : 0.5)
@@ -178,6 +181,16 @@ struct FiledColumn: View {
                 if file.isError {
                     Button("Retry") {
                         onRetry(file)
+                    }
+                }
+                if !file.isError && !file.path.isEmpty {
+                    Button("Rename…") {
+                        onRename(file)
+                    }
+                    if !file.sourcePath.isEmpty {
+                        Button("Undo (restore original name)") {
+                            onRevert(file)
+                        }
                     }
                 }
                 if !file.path.isEmpty {

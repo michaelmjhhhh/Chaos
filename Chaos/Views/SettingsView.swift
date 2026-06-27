@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var testResult: String?
     @State private var isTesting = false
     @State private var configRevision = 0
+    @State private var showAdvanced = false
 
     var body: some View {
         ScrollView {
@@ -23,11 +24,16 @@ struct SettingsView: View {
         }
         .background(Theme.canvas)
         .frame(minWidth: 560, minHeight: 680)
+        .onAppear {
+            // Surface the required Base URL field straight away for custom endpoints.
+            if appState.resolvedProvider.requiresBaseURL { showAdvanced = true }
+        }
         .onChange(of: appState.config) {
             appState.saveConfig()
             appState.invalidateAPIHealthCheck()
             configRevision += 1
             testResult = nil
+            if appState.resolvedProvider.requiresBaseURL { showAdvanced = true }
         }
     }
 
@@ -45,8 +51,8 @@ struct SettingsView: View {
 
     private var providerCard: some View {
         SettingsCard(
-            title: "AI Provider",
-            subtitle: "Choose the model service used to name incoming images."
+            title: "Naming Service",
+            subtitle: "The AI that looks at your screenshots and writes their names."
         ) {
             VStack(alignment: .leading, spacing: Theme.sMed) {
                 Picker("Provider", selection: providerBinding) {
@@ -54,37 +60,73 @@ struct SettingsView: View {
                         Text(provider.displayName).tag(provider)
                     }
                 }
+                .labelsHidden()
+                .help("Choose who does the naming. ‘Chaos’ needs no setup; the others use your own account.")
 
                 HStack(alignment: .center, spacing: Theme.sSmall) {
-                    Text(appState.resolvedProvider.summary)
+                    Text(appState.resolvedProvider.plainDescription)
                         .font(Theme.bodySm)
                         .foregroundStyle(Theme.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Spacer()
 
                     SettingsBadge(
                         text: appState.resolvedProvider.connectionKind,
-                        systemImage: appState.resolvedProvider == .ollama ? "desktopcomputer" : "network",
-                        tint: appState.resolvedProvider == .ollama ? Theme.teal : Theme.coral
+                        systemImage: badgeIcon,
+                        tint: badgeTint
                     )
                 }
 
                 if appState.resolvedProvider.requiresAPIKey {
-                    VStack(alignment: .leading, spacing: Theme.sMicro) {
-                        Text("API Key")
-                            .font(Theme.caption)
-                            .foregroundStyle(Theme.textMuted)
-
-                        SecureField("API Key", text: apiKeyBinding)
-                            .font(Theme.code)
-                            .textFieldStyle(.roundedBorder)
-
-                        Text("One saved key is reused across remote providers. Update it when you switch services.")
-                            .font(Theme.bodySm)
-                            .foregroundStyle(Theme.textMuted)
-                    }
+                    apiKeyField
                 }
 
+                advancedDisclosure
+
+                testRow
+
+                SettingsHint(privacyNote, icon: "lock.shield")
+            }
+        }
+    }
+
+    private var privacyNote: String {
+        appState.resolvedProvider == .ollama
+            ? "Private: with Ollama, screenshots are read on this Mac and never leave it."
+            : "Each screenshot is sent to \(appState.resolvedProvider.displayName) only to generate its name."
+    }
+
+    @ViewBuilder
+    private var apiKeyField: some View {
+        VStack(alignment: .leading, spacing: Theme.sMicro) {
+            Text("API Key")
+                .font(Theme.caption)
+                .foregroundStyle(Theme.textMuted)
+
+            SecureField("Paste your API key", text: apiKeyBinding)
+                .font(Theme.code)
+                .textFieldStyle(.roundedBorder)
+                .help("The secret key from your provider account. It's stored on this Mac only.")
+
+            if let url = appState.resolvedProvider.signupURL {
+                Link(destination: url) {
+                    Label("Don't have a key? Get one — opens \(url.host ?? "the provider")", systemImage: "arrow.up.right.square")
+                        .font(Theme.bodySm)
+                }
+                .tint(Theme.coral)
+            }
+
+            SettingsHint("One saved key is reused across remote providers. Update it when you switch services.")
+        }
+    }
+
+    /// Model and Base URL are power-user knobs — hidden by default so the common path
+    /// (pick a service, paste a key, test) stays uncluttered for non-technical users.
+    @ViewBuilder
+    private var advancedDisclosure: some View {
+        DisclosureGroup(isExpanded: $showAdvanced) {
+            VStack(alignment: .leading, spacing: Theme.sMed) {
                 VStack(alignment: .leading, spacing: Theme.sMicro) {
                     Text("Model")
                         .font(Theme.caption)
@@ -97,10 +139,9 @@ struct SettingsView: View {
                     )
                     .font(Theme.code)
                     .textFieldStyle(.roundedBorder)
+                    .help("Which AI model to use. Leave blank to use the recommended default.")
 
-                    Text("Default model: \(appState.resolvedProvider.defaultModel)")
-                        .font(Theme.bodySm)
-                        .foregroundStyle(Theme.textMuted)
+                    SettingsHint("Leave blank to use the default: \(appState.resolvedProvider.defaultModel)")
                 }
 
                 if appState.resolvedProvider.allowsCustomBaseURL {
@@ -112,6 +153,7 @@ struct SettingsView: View {
                         TextField("Base URL", text: baseURLBinding, prompt: Text("https://...").font(Theme.code))
                             .font(Theme.code)
                             .textFieldStyle(.roundedBorder)
+                            .help("The web address of your OpenAI-compatible service.")
 
                         if appState.resolvedProvider.requiresBaseURL && (appState.config.baseURL ?? "").isEmpty {
                             HStack(spacing: Theme.sMicro) {
@@ -126,44 +168,69 @@ struct SettingsView: View {
                     }
                 } else {
                     LabeledContent("Endpoint") {
-                        Text(appState.resolvedBaseURL)
+                        Text(appState.resolvedBaseURL.isEmpty ? "—" : appState.resolvedBaseURL)
                             .font(Theme.codeSm)
                             .foregroundStyle(Theme.textMuted)
                             .textSelection(.enabled)
                     }
                 }
-
-                VStack(alignment: .leading, spacing: Theme.sSmall) {
-                    Button {
-                        testAPI()
-                    } label: {
-                        Label(
-                            isTesting ? "Testing Connection..." : "Test Connection",
-                            systemImage: isTesting ? "clock" : "bolt.horizontal.circle"
-                        )
-                        .font(Theme.button)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(isTesting ? Theme.ink.opacity(0.6) : Theme.ink)
-                        .clipShape(.rect(cornerRadius: Theme.r6))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(isTesting)
-
-                    if isTesting {
-                        SettingsConnectionResult(
-                            status: "Checking...",
-                            failureHint: appState.resolvedProvider.connectionFailureHint
-                        )
-                    } else if let testResult {
-                        SettingsConnectionResult(
-                            status: testResult,
-                            failureHint: appState.resolvedProvider.connectionFailureHint
-                        )
-                    }
-                }
             }
+            .padding(.top, Theme.sSmall)
+        } label: {
+            Text("Advanced options")
+                .font(Theme.caption)
+                .foregroundStyle(Theme.textMuted)
+        }
+    }
+
+    @ViewBuilder
+    private var testRow: some View {
+        VStack(alignment: .leading, spacing: Theme.sSmall) {
+            Button {
+                testAPI()
+            } label: {
+                Label(
+                    isTesting ? "Testing Connection..." : "Test Connection",
+                    systemImage: isTesting ? "clock" : "bolt.horizontal.circle"
+                )
+                .font(Theme.button)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(isTesting ? Theme.ink.opacity(0.6) : Theme.ink)
+                .clipShape(.rect(cornerRadius: Theme.r6))
+            }
+            .buttonStyle(.plain)
+            .disabled(isTesting)
+            .help("Send a quick request to confirm naming will work.")
+
+            if isTesting {
+                SettingsConnectionResult(
+                    status: "Checking...",
+                    failureHint: appState.resolvedProvider.connectionFailureHint
+                )
+            } else if let testResult {
+                SettingsConnectionResult(
+                    status: testResult,
+                    failureHint: appState.resolvedProvider.connectionFailureHint
+                )
+            }
+        }
+    }
+
+    private var badgeIcon: String {
+        switch appState.resolvedProvider {
+        case .ollama: "desktopcomputer"
+        case .chaosHosted: "sparkles"
+        default: "network"
+        }
+    }
+
+    private var badgeTint: Color {
+        switch appState.resolvedProvider {
+        case .ollama: Theme.teal
+        case .chaosHosted: Theme.success
+        default: Theme.coral
         }
     }
 
@@ -181,14 +248,18 @@ struct SettingsView: View {
 
     private var outputCard: some View {
         SettingsCard(
-            title: "Output",
-            subtitle: "Shape generated filenames and optional subfolder organization."
+            title: "Naming & Filing",
+            subtitle: "Shape the filenames Chaos creates and how it groups them."
         ) {
             VStack(alignment: .leading, spacing: Theme.sMed) {
-                Picker("Language", selection: languageBinding) {
-                    ForEach(SlugLanguage.allCases) { language in
-                        Text(language.displayName).tag(language)
+                VStack(alignment: .leading, spacing: Theme.sMicro) {
+                    Picker("Name language", selection: languageBinding) {
+                        ForEach(SlugLanguage.allCases) { language in
+                            Text(language.displayName).tag(language)
+                        }
                     }
+                    .help("The language of the generated names — not the app's own language.")
+                    SettingsHint("Sets the language of the generated names (the app stays in English).")
                 }
 
                 VStack(alignment: .leading, spacing: Theme.sMicro) {
@@ -203,19 +274,58 @@ struct SettingsView: View {
                     )
                     .font(Theme.code)
                     .textFieldStyle(.roundedBorder)
+                    .help("Build the filename from pieces: {slug} the AI name, {date} the day, {time} the time.")
 
-                    Text("Tokens: {slug}  {date}  {time}")
-                        .font(Theme.codeSm)
-                        .foregroundStyle(Theme.textMuted)
+                    SettingsHint("Pieces you can use:  {slug} = AI name · {date} = 2026-06-27 · {time} = 143200")
                 }
 
-                Picker("Subfolders", selection: subfolderRuleBinding) {
+                Picker("Group into subfolders", selection: subfolderRuleBinding) {
                     ForEach(SubfolderRule.allCases) { rule in
                         Text(rule.displayName).tag(rule)
                     }
                 }
+                .help("Optionally tuck filed images into dated subfolders.")
+
+                filenamePreview
             }
         }
+    }
+
+    /// A live sample of what a finished file will be called, so the template tokens
+    /// stop being abstract. Updates as the template / subfolder / language change.
+    @ViewBuilder
+    private var filenamePreview: some View {
+        let policy = appState.resolvedNamingPolicy
+        let sample = sampleDate
+        let base = policy.renderedBaseName(slug: "meeting-notes", date: sample) + ".png"
+        let dir = policy.outputDirectory(base: URL(fileURLWithPath: "/__root__"), date: sample)
+        let prefix = dir.lastPathComponent == "__root__" ? "" : dir.lastPathComponent + "/"
+
+        VStack(alignment: .leading, spacing: Theme.sMicro) {
+            Text("PREVIEW")
+                .font(Theme.captionSm)
+                .tracking(1.2)
+                .foregroundStyle(Theme.textSoft)
+            HStack(spacing: Theme.sSmall) {
+                Image(systemName: "doc.text.image")
+                    .foregroundStyle(Theme.coral)
+                Text(prefix + base)
+                    .font(Theme.code)
+                    .foregroundStyle(Theme.warmInk)
+                    .textSelection(.enabled)
+            }
+            .padding(Theme.sSmall)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surfaceMuted)
+            .clipShape(.rect(cornerRadius: Theme.r6))
+        }
+    }
+
+    /// A fixed, readable example timestamp for the preview (so seconds don't tick).
+    private var sampleDate: Date {
+        var c = DateComponents()
+        c.year = 2026; c.month = 6; c.day = 27; c.hour = 14; c.minute = 32; c.second = 0
+        return Calendar(identifier: .gregorian).date(from: c) ?? Date()
     }
 
     private var behaviorCard: some View {
@@ -225,7 +335,11 @@ struct SettingsView: View {
         ) {
             VStack(alignment: .leading, spacing: Theme.sSmall) {
                 Toggle("Copy image to clipboard", isOn: clipboardBinding)
+                    .help("After filing, put the renamed image on the clipboard so you can paste it.")
                 Toggle("Start watching on launch", isOn: autoStartBinding)
+                    .help("Begin watching automatically when Chaos opens.")
+                Toggle("Show a notification when done", isOn: notifyBinding)
+                    .help("Get a macOS notification each time a screenshot is filed or fails.")
             }
         }
     }
@@ -346,6 +460,16 @@ struct SettingsView: View {
 
     private var clipboardBinding: Binding<Bool> {
         Binding(get: { appState.config.copyToClipboard ?? false }, set: { appState.config.copyToClipboard = $0 })
+    }
+
+    private var notifyBinding: Binding<Bool> {
+        Binding(
+            get: { appState.config.notifyOnComplete ?? false },
+            set: { enabled in
+                appState.config.notifyOnComplete = enabled
+                if enabled { NotificationService.requestAuthorization() }
+            }
+        )
     }
 
     private var autoStartBinding: Binding<Bool> {

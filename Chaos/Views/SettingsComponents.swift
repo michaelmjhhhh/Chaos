@@ -59,6 +59,30 @@ struct SettingsCardHeader: View {
     }
 }
 
+/// A small, muted line of explanatory text under a control — plain-language help so a
+/// non-technical user understands what a field does and why it matters.
+struct SettingsHint: View {
+    let text: String
+    var icon: String = "info.circle"
+
+    init(_ text: String, icon: String = "info.circle") {
+        self.text = text
+        self.icon = icon
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.sMicro) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+                .foregroundStyle(Theme.textSoft)
+            Text(text)
+                .font(Theme.bodySm)
+                .foregroundStyle(Theme.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 struct SettingsBadge: View {
     let text: String
     let systemImage: String

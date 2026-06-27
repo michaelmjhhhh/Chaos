@@ -31,6 +31,22 @@ struct ChaosApp: App {
                 }
                 .keyboardShortcut(.space, modifiers: [])
             }
+            CommandGroup(replacing: .help) {
+                Button("Chaos Help") {
+                    appState.showHelp = true
+                }
+                .keyboardShortcut("?", modifiers: .command)
+
+                Button("Replay Welcome Guide") {
+                    appState.hasCompletedOnboarding = false
+                }
+
+                Divider()
+
+                if let site = URL(string: "https://github.com/michaelmjhhhh/chaos") {
+                    Link("Chaos Website", destination: site)
+                }
+            }
         }
 
         MenuBarExtra {
