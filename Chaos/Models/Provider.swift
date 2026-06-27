@@ -13,15 +13,18 @@ import Foundation
 /// `VisionAPIClient`) and flip the default in `Provider.from(_:)` to light up
 /// zero-config automatically.
 enum HostedProvider {
-    /// Hosted proxy endpoint. Empty until the backend is provisioned.
-    static let baseURL = ""
+    /// Hosted proxy endpoint (Vercel). The app appends `/chat/completions`.
+    static let baseURL = "https://chaos-snowy-ten.vercel.app/api"
 
-    /// Default model served by the hosted proxy.
-    static let model = "gpt-4o-mini"
+    /// Model the proxy serves. The proxy pins this server-side; the value here is for
+    /// display/consistency.
+    static let model = "agnes-2.0-flash"
 
-    /// Bundled credential used to authenticate against the proxy. Injected by
-    /// `VisionAPIClient`. Empty until provisioned (kept out of the shipped binary).
-    static let bundledCredential = ""
+    /// Shared app token the proxy validates (first half of the Bearer; the second half is
+    /// this device's hash, added in AppState.resolvedAPIKey). This is only a weak gate —
+    /// real protection is the proxy's per-device + global limits — so shipping it is fine.
+    /// Rotate by changing both this value and the Vercel APP_TOKEN env together.
+    static let bundledCredential = "chaostrial2026alpha"
 
     /// Whether the hosted provider is ready for real use. When false, onboarding and
     /// settings steer the user to the guided key flow instead.
