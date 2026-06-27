@@ -57,6 +57,12 @@ struct FriendlyError: Equatable {
                     action: .openSettings
                 )
             case 402:
+                if provider == .chaosHosted {
+                    return FriendlyError(
+                        message: "You've used your 20 free names. Add your own provider key in Settings to keep going.",
+                        action: .openSettings
+                    )
+                }
                 return FriendlyError(
                     message: "Your provider account is out of credit. Add funds, or switch provider in Settings.",
                     action: .openSettings
