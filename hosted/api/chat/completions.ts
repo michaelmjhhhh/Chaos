@@ -15,6 +15,9 @@ import { Redis } from "@upstash/redis";
 
 const redis = Redis.fromEnv();
 
+// Trimmed so a stray newline/space pasted into a Vercel env field can't break auth.
+const APP_TOKEN = (process.env.APP_TOKEN ?? "").trim();
+const AGNES_API_KEY = (process.env.AGNES_API_KEY ?? "").trim();
 const FREE_LIMIT = intEnv("FREE_LIMIT", 20);
 const GLOBAL_MONTHLY_LIMIT = intEnv("GLOBAL_MONTHLY_LIMIT", 100_000);
 const MODEL = process.env.MODEL ?? "agnes-2.0-flash";
@@ -34,10 +37,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
   const sep = bearer.indexOf(":");
-  const appToken = sep === -1 ? bearer : bearer.slice(0, sep);
-  const deviceHash = sep === -1 ? "" : bearer.slice(sep + 1);
+  const appToken = (sep === -1 ? bearer : bearer.slice(0, sep)).trim();
+  const deviceHash = (sep === -1 ? "" : bearer.slice(sep + 1)).trim();
 
-  if (!process.env.APP_TOKEN || appToken !== process.env.APP_TOKEN) {
+  if (!APP_TOKEN || appToken !== APP_TOKEN) {
     res.status(401).json(errorBody("Unauthorized"));
     return;
   }
@@ -77,7 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.AGNES_API_KEY ?? ""}`,
+        Authorization: `Bearer ${AGNES_API_KEY}`,
       },
       body: JSON.stringify({ ...body, model: MODEL, stream: false }),
     });
