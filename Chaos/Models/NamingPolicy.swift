@@ -60,10 +60,24 @@ struct NamingPolicy {
     }
 
     private func format(_ date: Date, as format: String) -> String {
+        Self.formatter(format: format, timeZone: timeZone).string(from: date)
+    }
+
+    // DateFormatter is expensive to build and gets called a few times per filed image.
+    // Cache one per (format, time zone) pair behind a lock.
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var formatters: [String: DateFormatter] = [:]
+
+    private static func formatter(format: String, timeZone: TimeZone) -> DateFormatter {
+        let key = "\(format)|\(timeZone.identifier)"
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cached = formatters[key] { return cached }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = timeZone
         formatter.dateFormat = format
-        return formatter.string(from: date)
+        formatters[key] = formatter
+        return formatter
     }
 }

@@ -404,11 +404,18 @@ final class AppState {
         saveHistory()
     }
 
+    /// Persist history off the hot path. Writing JSON after every filed screenshot
+    /// shouldn't block the next one or the UI, so it runs on a background task against a
+    /// snapshot of the current list.
     private func saveHistory() {
-        do {
-            try historyStore.save(recentFiles)
-        } catch {
-            apiStatus = "HISTORY FAIL"
+        let snapshot = recentFiles
+        let store = historyStore
+        Task.detached(priority: .utility) {
+            do {
+                try store.save(snapshot)
+            } catch {
+                await MainActor.run { [weak self] in self?.apiStatus = "HISTORY FAIL" }
+            }
         }
     }
 
