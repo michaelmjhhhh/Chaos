@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var isTesting = false
     @State private var configRevision = 0
     @State private var showAdvanced = false
+    @State private var checkingUsage = false
+    @State private var usageText: String?
+    @State private var usageRemaining: Int?
 
     var body: some View {
         ScrollView {
@@ -82,11 +85,56 @@ struct SettingsView: View {
                     apiKeyField
                 }
 
+                if appState.resolvedProvider == .chaosHosted {
+                    freeTrialRow
+                }
+
                 advancedDisclosure
 
                 testRow
 
                 SettingsHint(privacyNote, icon: "lock.shield")
+            }
+        }
+    }
+
+    /// Lets a user on the bundled hosted tier check how much of their free trial is left.
+    @ViewBuilder
+    private var freeTrialRow: some View {
+        VStack(alignment: .leading, spacing: Theme.sSmall) {
+            Button {
+                checkUsage()
+            } label: {
+                Label(checkingUsage ? "Checking…" : "Check free trial", systemImage: "gauge.with.needle")
+                    .font(Theme.bodySm)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.coral)
+            .disabled(checkingUsage)
+            .help("See how many free names you have left on this Mac.")
+
+            if let usageText {
+                Text(usageText)
+                    .font(Theme.bodySm)
+                    .foregroundStyle(usageRemaining == 0 ? Theme.error : Theme.textBody)
+            }
+        }
+    }
+
+    private func checkUsage() {
+        checkingUsage = true
+        usageText = nil
+        Task {
+            let usage = await appState.fetchHostedUsage()
+            checkingUsage = false
+            if let usage {
+                usageRemaining = usage.remaining
+                usageText = usage.remaining > 0
+                    ? "You've used \(usage.used) of \(usage.limit) free names — \(usage.remaining) left."
+                    : "You've used all \(usage.limit) free names. Add your own key below to keep going."
+            } else {
+                usageRemaining = nil
+                usageText = "Couldn't check right now. Check your internet and try again."
             }
         }
     }

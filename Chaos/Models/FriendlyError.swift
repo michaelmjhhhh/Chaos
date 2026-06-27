@@ -59,7 +59,7 @@ struct FriendlyError: Equatable {
             case 402:
                 if provider == .chaosHosted {
                     return FriendlyError(
-                        message: "You've used your 20 free names. Add your own provider key in Settings to keep going.",
+                        message: "You've used all your free names. Add your own provider key in Settings to keep going.",
                         action: .openSettings
                     )
                 }
