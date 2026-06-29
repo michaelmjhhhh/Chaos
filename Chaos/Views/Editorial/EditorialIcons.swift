@@ -63,7 +63,7 @@ enum EditorialIcon {
                 let sides = 8
 
                 var outer = Path()
-                for i in 0..<sides {
+                for i in 0 ..< sides {
                     let angle = (Double(i) / Double(sides)) * 2 * .pi - .pi / 2
                     let pt = CGPoint(
                         x: cx + radius * CGFloat(cos(angle)),
@@ -74,7 +74,7 @@ enum EditorialIcon {
                 outer.closeSubpath()
                 ctx.stroke(outer, with: .color(color), lineWidth: 0.5)
 
-                for i in 0..<sides {
+                for i in 0 ..< sides {
                     let angle = (Double(i) / Double(sides)) * 2 * .pi - .pi / 2
                     let outerPt = CGPoint(
                         x: cx + radius * CGFloat(cos(angle)),

@@ -28,7 +28,7 @@ struct PipelineCard: View {
                 }
             }
 
-            if !file.isError && !isInFlight {
+            if !file.isError, !isInFlight {
                 Text("✓")
                     .font(.system(size: 10, design: .serif))
                     .foregroundStyle(Theme.success)
@@ -48,11 +48,11 @@ struct PipelineCard: View {
         return "Filed as \(name), from \(file.originalName)"
     }
 
-    @ViewBuilder
     private var thumbnail: some View {
         ZStack {
             if !file.path.isEmpty,
-               let image = NSImage(contentsOfFile: file.path) {
+               let image = NSImage(contentsOfFile: file.path)
+            {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFill()
@@ -68,7 +68,6 @@ struct PipelineCard: View {
         )
     }
 
-    @ViewBuilder
     private var content: some View {
         VStack(alignment: .leading, spacing: 2) {
             if file.isError {

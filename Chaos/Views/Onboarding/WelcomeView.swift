@@ -28,7 +28,9 @@ struct WelcomeView: View {
             : [.intro, .connect, .files, .ready]
     }
 
-    private var step: Step { steps[min(stepIndex, steps.count - 1)] }
+    private var step: Step {
+        steps[min(stepIndex, steps.count - 1)]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -186,7 +188,7 @@ struct WelcomeView: View {
         } label: {
             Text(step == .ready ? "Start Watching" : "Continue")
                 .font(Theme.button)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 8)
                 .background(continueEnabled ? Theme.coral : Theme.coral.opacity(0.4))
@@ -205,7 +207,7 @@ struct WelcomeView: View {
 
     private var stepDots: some View {
         HStack(spacing: 6) {
-            ForEach(0..<steps.count, id: \.self) { i in
+            ForEach(0 ..< steps.count, id: \.self) { i in
                 Circle()
                     .fill(i == stepIndex ? Theme.coral : Theme.border)
                     .frame(width: 6, height: 6)
@@ -213,7 +215,6 @@ struct WelcomeView: View {
         }
     }
 
-    @ViewBuilder
     private var connectTestRow: some View {
         HStack(spacing: Theme.sSmall) {
             Button {
@@ -241,11 +242,11 @@ struct WelcomeView: View {
 
     // MARK: - Building blocks
 
-    private func stepScaffold<Body: View>(
+    private func stepScaffold(
         eyebrow: String,
         title: String,
         blurb: String,
-        @ViewBuilder body: () -> Body
+        @ViewBuilder body: () -> some View
     ) -> some View {
         VStack(alignment: .leading, spacing: Theme.sMed) {
             Text(eyebrow.uppercased())
@@ -347,7 +348,7 @@ struct WelcomeView: View {
     private func finish(start: Bool) {
         appState.saveConfig()
         appState.hasCompletedOnboarding = true
-        if start && appState.startupValidationError == nil {
+        if start, appState.startupValidationError == nil {
             appState.start()
         }
         onFinish()

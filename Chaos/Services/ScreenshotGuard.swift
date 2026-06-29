@@ -18,24 +18,28 @@ enum ScreenshotGuard {
         let fm = FileManager.default
         guard let attrs = try? fm.attributesOfItem(atPath: url.path),
               let type = attrs[.type] as? FileAttributeType,
-              type == .typeRegular else {
+              type == .typeRegular
+        else {
             return false
         }
 
         guard let modDate = attrs[.modificationDate] as? Date,
-              modDate >= watcherStartedAt.addingTimeInterval(-2) else {
+              modDate >= watcherStartedAt.addingTimeInterval(-2)
+        else {
             return false
         }
 
         guard let size = attrs[.size] as? Int,
-              size >= minSize, size <= maxSize else {
+              size >= minSize, size <= maxSize
+        else {
             return false
         }
 
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? handle.close() }
         guard let headerData = try? handle.read(upToCount: pngMagic.count),
-              headerData.count == pngMagic.count else {
+              headerData.count == pngMagic.count
+        else {
             return false
         }
         return headerData.elementsEqual(pngMagic)

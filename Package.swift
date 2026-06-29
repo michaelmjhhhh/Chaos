@@ -11,10 +11,10 @@ let package = Package(
             path: "Chaos",
             exclude: ["Info.plist"],
             resources: [
-                .process("Resources"),
+                .process("Resources")
             ],
             swiftSettings: [
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v5)
             ]
         ),
         .testTarget(
@@ -22,8 +22,8 @@ let package = Package(
             dependencies: ["Chaos"],
             path: "Tests/ChaosTests",
             swiftSettings: [
-                .swiftLanguageMode(.v5),
+                .swiftLanguageMode(.v5)
             ]
-        ),
+        )
     ]
 )

@@ -77,7 +77,7 @@ struct FriendlyError: Equatable {
                     message: "The naming service is busy right now. Wait a moment and try again.",
                     action: .retry
                 )
-            case 500...599:
+            case 500 ... 599:
                 return FriendlyError(
                     message: "The naming service had a temporary problem. Try again in a moment.",
                     action: .retry
@@ -126,24 +126,24 @@ struct FriendlyError: Equatable {
     private static func map(_ error: URLError, provider: Provider) -> FriendlyError {
         switch error.code {
         case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
-            return FriendlyError(
+            FriendlyError(
                 message: "You appear to be offline. Check your internet, then try again.",
                 action: .checkInternet
             )
         case .timedOut:
-            return FriendlyError(
+            FriendlyError(
                 message: "The naming service took too long to respond. Try again.",
                 action: .retry
             )
         case .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed:
-            return FriendlyError(
+            FriendlyError(
                 message: provider == .ollama
                     ? "Couldn't reach Ollama on this Mac. Make sure Ollama is running."
                     : "Couldn't reach the naming service. Check your internet, then try again.",
                 action: provider == .ollama ? .openSettings : .checkInternet
             )
         default:
-            return FriendlyError(
+            FriendlyError(
                 message: "A network problem stopped naming that image. Try again.",
                 action: .retry
             )

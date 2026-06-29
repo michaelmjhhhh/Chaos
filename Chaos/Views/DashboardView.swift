@@ -37,7 +37,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private var headlineStrip: some View {
         HStack(alignment: .center) {
             headlineText
@@ -88,10 +87,10 @@ struct DashboardView: View {
 
     private var ellipsisDots: String {
         switch ellipsisCount {
-        case 1: return "."
-        case 2: return ".."
-        case 3: return "..."
-        default: return ""
+        case 1: "."
+        case 2: ".."
+        case 3: "..."
+        default: ""
         }
     }
 
@@ -103,7 +102,7 @@ struct DashboardView: View {
                     Image(systemName: "stop.fill").font(.system(size: 8))
                     Text("Stop").font(Theme.button)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
                 .background(Theme.error)
@@ -117,7 +116,7 @@ struct DashboardView: View {
                     Image(systemName: "play.fill").font(.system(size: 9))
                     Text("Start Watching").font(Theme.button)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 7)
                 .background(Theme.coral)
@@ -130,7 +129,6 @@ struct DashboardView: View {
 
     /// A plain-language, actionable banner for the most recent failure. Gives a
     /// non-technical user the next step (retry / open settings) instead of a stack trace.
-    @ViewBuilder
     private func errorBanner(_ error: FriendlyError) -> some View {
         HStack(alignment: .top, spacing: Theme.sSmall) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -180,7 +178,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private var bodyColumns: some View {
         HStack(alignment: .top, spacing: 28) {
             heroColumn
@@ -191,7 +188,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private var heroColumn: some View {
         VStack(alignment: .leading, spacing: Theme.sMed) {
             HeroCard(
@@ -238,8 +234,8 @@ struct DashboardView: View {
 
     private var proposedSlug: String? {
         switch appState.currentStage {
-        case .success(let name): return name
-        default: return appState.currentFile
+        case .success(let name): name
+        default: appState.currentFile
         }
     }
 
@@ -248,7 +244,6 @@ struct DashboardView: View {
         return last.duration
     }
 
-    @ViewBuilder
     private var editorialColumn: some View {
         VStack(alignment: .leading, spacing: Theme.sLg) {
             todayBlock
@@ -257,7 +252,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private var todayBlock: some View {
         VStack(alignment: .leading, spacing: Theme.sSmall) {
             Text("TODAY").smallCaps().foregroundStyle(Theme.textMuted)
@@ -277,7 +271,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private var foldersBlock: some View {
         VStack(alignment: .leading, spacing: Theme.sMed) {
             Text("FOLDERS").smallCaps().foregroundStyle(Theme.textMuted)
@@ -290,7 +283,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private func directoryRow(icon: AnyView, label: String, path: String) -> some View {
         HStack(alignment: .center, spacing: Theme.sSmall) {
             icon
@@ -305,7 +297,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private var colophon: some View {
         VStack(spacing: 0) {
             EditorialRule()
@@ -330,9 +321,9 @@ struct DashboardView: View {
 
     private var apiColor: Color {
         switch appState.apiStatus {
-        case "OK": return Theme.success
-        case "FAIL": return Theme.error
-        default: return Theme.textSoft
+        case "OK": Theme.success
+        case "FAIL": Theme.error
+        default: Theme.textSoft
         }
     }
 

@@ -51,7 +51,8 @@ struct PipelineView: View {
         .onKeyPress(.return) {
             if let id = selection,
                let file = appState.recentFiles.first(where: { $0.id == id }),
-               !file.path.isEmpty {
+               !file.path.isEmpty
+            {
                 NSWorkspace.shared.open(URL(fileURLWithPath: file.path))
                 return .handled
             }
@@ -73,7 +74,6 @@ struct PipelineView: View {
         }
     }
 
-    @ViewBuilder
     private func liveStrip(_ live: (stage: String, file: String)) -> some View {
         HStack(spacing: Theme.sSmall) {
             ProgressView().controlSize(.small)
@@ -104,7 +104,6 @@ struct PipelineView: View {
         renameTarget = file
     }
 
-    @ViewBuilder
     private func renameSheet(for file: RecentFile) -> some View {
         VStack(alignment: .leading, spacing: Theme.sMed) {
             Text("Rename file")

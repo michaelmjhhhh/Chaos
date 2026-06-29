@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -5,7 +6,7 @@ import SwiftUI
 final class AppState {
     var watcherStatus: WatcherStatus = .stopped
     var watcherStartedAt: Date?
-    var config: AppConfig = AppConfig()
+    var config: AppConfig = .init()
     var currentFile: String?
     var currentStage: ProcessingStage?
     var recentFiles: [RecentFile] = []
@@ -72,7 +73,8 @@ final class AppState {
 
     var startupValidationError: String? {
         guard resolvedProvider.requiresAPIKey,
-              resolvedAPIKey.trimmingCharacters(in: .whitespaces).isEmpty else {
+              resolvedAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        else {
             return nil
         }
         return "API key not configured"
@@ -98,6 +100,10 @@ final class AppState {
 
     var resolvedNotifyOnComplete: Bool {
         config.notifyOnComplete ?? false
+    }
+
+    var resolvedAppearance: AppearancePreference {
+        AppearancePreference.from(config.appearance)
     }
 
     var resolvedNamingPolicy: NamingPolicy {
@@ -130,7 +136,7 @@ final class AppState {
         let slugs = recentFiles
             .filter { !$0.isError }
             .filter { calendar.startOfDay(for: $0.timestamp) == today }
-            .map { $0.newName }
+            .map(\.newName)
         return Tokenizer.topNouns(from: slugs, limit: 5)
     }
 
@@ -145,10 +151,28 @@ final class AppState {
     func loadConfig() {
         config = configService.load()
         recentFiles = historyStore.load()
+        applyAppearance()
     }
 
     func saveConfig() {
         try? configService.save(config)
+    }
+
+    /// Update the app's light/dark appearance preference and apply it immediately.
+    /// `.system` is stored as nil to keep the config file clean (the default).
+    func setAppearance(_ preference: AppearancePreference) {
+        config.appearance = preference == .system ? nil : preference.rawValue
+        applyAppearance()
+    }
+
+    /// Force the app's appearance to the saved preference, or follow the system
+    /// when `.system`. The adaptive Theme colors resolve against this.
+    func applyAppearance() {
+        switch resolvedAppearance {
+        case .system: NSApplication.shared.appearance = nil
+        case .light: NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        }
     }
 
     func selectProvider(_ provider: Provider) {
@@ -243,7 +267,8 @@ final class AppState {
     func retry(_ file: RecentFile) {
         let sourceURL = URL(fileURLWithPath: file.sourcePath)
         guard !file.sourcePath.isEmpty,
-              FileManager.default.fileExists(atPath: sourceURL.path) else {
+              FileManager.default.fileExists(atPath: sourceURL.path)
+        else {
             record(RecentFile(
                 originalName: file.originalName,
                 newName: "",

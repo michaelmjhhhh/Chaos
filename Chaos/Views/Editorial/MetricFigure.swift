@@ -3,7 +3,7 @@ import SwiftUI
 struct MetricFigure: View {
     let value: String
     let label: String
-    var accent: Color? = nil
+    var accent: Color?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sMicro) {

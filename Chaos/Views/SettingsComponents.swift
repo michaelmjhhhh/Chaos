@@ -96,11 +96,11 @@ struct SettingsBadge: View {
             Text(text)
                 .foregroundStyle(Theme.textBody)
         }
-            .font(Theme.caption)
-            .padding(.horizontal, Theme.sSmall)
-            .padding(.vertical, Theme.sMicro)
-            .background(tint.opacity(0.1))
-            .clipShape(.capsule)
+        .font(Theme.caption)
+        .padding(.horizontal, Theme.sSmall)
+        .padding(.vertical, Theme.sMicro)
+        .background(tint.opacity(0.1))
+        .clipShape(.capsule)
     }
 }
 

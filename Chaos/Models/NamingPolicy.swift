@@ -5,7 +5,9 @@ enum SubfolderRule: String, CaseIterable, Identifiable {
     case day
     case month
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
@@ -66,7 +68,7 @@ struct NamingPolicy {
     // DateFormatter is expensive to build and gets called a few times per filed image.
     // Cache one per (format, time zone) pair behind a lock.
     private static let cacheLock = NSLock()
-    nonisolated(unsafe) private static var formatters: [String: DateFormatter] = [:]
+    private nonisolated(unsafe) static var formatters: [String: DateFormatter] = [:]
 
     private static func formatter(format: String, timeZone: TimeZone) -> DateFormatter {
         let key = "\(format)|\(timeZone.identifier)"

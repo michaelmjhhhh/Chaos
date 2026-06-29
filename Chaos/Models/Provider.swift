@@ -28,7 +28,9 @@ enum HostedProvider {
 
     /// Whether the hosted provider is ready for real use. When false, onboarding and
     /// settings steer the user to the guided key flow instead.
-    static var isConfigured: Bool { !baseURL.isEmpty }
+    static var isConfigured: Bool {
+        !baseURL.isEmpty
+    }
 }
 
 enum Provider: String, CaseIterable, Identifiable {
@@ -40,7 +42,9 @@ enum Provider: String, CaseIterable, Identifiable {
     case openaiCompatible = "openai-compatible"
     case ollama
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
@@ -172,7 +176,9 @@ enum SlugLanguage: String, CaseIterable, Identifiable {
     case en
     case zh
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
