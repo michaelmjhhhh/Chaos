@@ -6,6 +6,7 @@ enum Theme {
     // system appearance automatically — call sites stay unchanged.
 
     // MARK: - Brand
+
     static let coral = Color(light: 0xCC785C, dark: 0xD98E6B)
     static let coralHover = Color(light: 0xB8694F, dark: 0xE49C79)
     static let coralActive = Color(light: 0xA9583E, dark: 0xF0A985)
@@ -13,6 +14,7 @@ enum Theme {
     static let onBrand = Color(light: 0xFFFFFF, dark: 0xFFFFFF)
 
     // MARK: - Surfaces
+
     static let canvas = Color(light: 0xFAF9F5, dark: 0x1A1918)
     static let surfaceCard = Color(light: 0xFFFFFF, dark: 0x262523)
     static let surfaceMuted = Color(light: 0xF5F0E8, dark: 0x201F1D)
@@ -20,6 +22,7 @@ enum Theme {
     static let surfaceDarkElevated = Color(light: 0x262523, dark: 0x2E2C2A)
 
     // MARK: - Text
+
     static let ink = Color(light: 0x141413, dark: 0xF2F0EA)
     static let textBody = Color(light: 0x3D3D3A, dark: 0xCFCBC2)
     static let textMuted = Color(light: 0x6C6A64, dark: 0x9C9890)
@@ -27,23 +30,27 @@ enum Theme {
     static let textOnDark = Color(light: 0xFAF9F5, dark: 0xFAF9F5)
 
     // MARK: - Semantic
+
     static let success = Color(light: 0x4DA664, dark: 0x5FBE79)
     static let warning = Color(light: 0xD4A017, dark: 0xE0B53A)
     static let error = Color(light: 0xC64545, dark: 0xE06B6B)
     static let teal = Color(light: 0x5DB8A6, dark: 0x6FCDBA)
 
     // MARK: - Borders & Lines
+
     static let border = Color(light: 0xE2DDD4, dark: 0x3A3833)
     static let borderLight = Color(light: 0xEBE6DF, dark: 0x322F2B)
     static let divider = Color(light: 0xE6DFD8, dark: 0x35332E)
 
     // MARK: - Display (Serif — weight 400, negative tracking)
+
     static let displayXL = Font.system(size: 32, weight: .regular, design: .serif)
     static let displayLg = Font.system(size: 24, weight: .regular, design: .serif)
     static let displayMd = Font.system(size: 18, weight: .regular, design: .serif)
     static let displaySm = Font.system(size: 15, weight: .regular, design: .serif)
 
     // MARK: - Body (Sans)
+
     static let titleMd = Font.system(size: 14, weight: .medium)
     static let titleSm = Font.system(size: 13, weight: .medium)
     static let body = Font.system(size: 13, weight: .regular)
@@ -53,10 +60,12 @@ enum Theme {
     static let button = Font.system(size: 13, weight: .medium)
 
     // MARK: - Mono
+
     static let code = Font.system(size: 12, weight: .regular, design: .monospaced)
     static let codeSm = Font.system(size: 11, weight: .regular, design: .monospaced)
 
     // MARK: - Radii
+
     static let r4: CGFloat = 4
     static let r6: CGFloat = 6
     static let r8: CGFloat = 8
@@ -64,6 +73,7 @@ enum Theme {
     static let r12: CGFloat = 12
 
     // MARK: - Shadows
+
     // Shadows need more weight on dark surfaces to remain visible.
     static let shadowCard = Color(lightBlack: 0.04, darkBlack: 0.45)
     static let shadowMd = Color(lightBlack: 0.06, darkBlack: 0.55)
@@ -157,15 +167,19 @@ extension View {
     func card(padding: CGFloat = 16) -> some View {
         modifier(CardModifier(padding: padding))
     }
+
     func sectionHead() -> some View {
         modifier(SectionHeader())
     }
+
     func smallCaps() -> some View {
         modifier(SmallCaps())
     }
+
     func clipping(padding: CGFloat = 10) -> some View {
         modifier(ClippingCard(padding: padding))
     }
+
     func marginalia() -> some View {
         modifier(Marginalia())
     }
@@ -198,7 +212,8 @@ extension Color {
 
     /// Adaptive grayscale overlay (white + alpha) that differs by appearance.
     init(lightOverlay: (white: CGFloat, alpha: CGFloat),
-         darkOverlay: (white: CGFloat, alpha: CGFloat)) {
+         darkOverlay: (white: CGFloat, alpha: CGFloat))
+    {
         self.init(nsColor: NSColor(name: nil) { appearance in
             let o = appearance.isDark ? darkOverlay : lightOverlay
             return NSColor(white: o.white, alpha: o.alpha)

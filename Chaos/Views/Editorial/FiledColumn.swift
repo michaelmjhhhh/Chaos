@@ -104,7 +104,6 @@ struct FiledColumn: View {
         }
     }
 
-    @ViewBuilder
     private var controlBar: some View {
         HStack(spacing: Theme.sMed) {
             searchField
@@ -113,7 +112,6 @@ struct FiledColumn: View {
         }
     }
 
-    @ViewBuilder
     private var searchField: some View {
         ZStack(alignment: .bottom) {
             TextField("", text: $searchText, prompt: Text("Search filings…")
@@ -132,7 +130,6 @@ struct FiledColumn: View {
         }
     }
 
-    @ViewBuilder
     private var filterChips: some View {
         HStack(spacing: Theme.sMed) {
             ForEach(Filter.allCases, id: \.self) { f in
@@ -143,7 +140,6 @@ struct FiledColumn: View {
         }
     }
 
-    @ViewBuilder
     private func chip(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(spacing: 2) {
@@ -189,7 +185,6 @@ struct FiledColumn: View {
         return "No matches."
     }
 
-    @ViewBuilder
     private func cardRow(file: RecentFile) -> some View {
         PipelineCard(file: file)
             .background(
@@ -208,7 +203,7 @@ struct FiledColumn: View {
                         onRetry(file)
                     }
                 }
-                if !file.isError && !file.path.isEmpty {
+                if !file.isError, !file.path.isEmpty {
                     Button("Rename…") {
                         onRename(file)
                     }
