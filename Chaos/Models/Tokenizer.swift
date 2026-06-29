@@ -37,7 +37,7 @@ enum Tokenizer {
             .filter { token in
                 guard token.count >= 3 else { return false }
                 guard !stopwords.contains(token) else { return false }
-                guard token.contains(where: { $0.isLetter }) else { return false }
+                guard token.contains(where: \.isLetter) else { return false }
                 return true
             }
     }

@@ -16,12 +16,12 @@ struct StageProgress: View {
         guard let stage else { return .upcoming }
         let activeIdx: Int
         switch stage {
-        case .caught:    activeIdx = -1
+        case .caught: activeIdx = -1
         case .analyzing: activeIdx = 0
-        case .renaming:  activeIdx = 1
+        case .renaming: activeIdx = 1
         case .clipboard: activeIdx = includesClipboard ? 2 : 1
-        case .success:   activeIdx = labels.count
-        case .error:     return .upcoming
+        case .success: activeIdx = labels.count
+        case .error: return .upcoming
         }
         guard let idx = labels.firstIndex(of: label) else { return .upcoming }
         if idx < activeIdx { return .completed }
@@ -50,9 +50,9 @@ struct StageProgress: View {
 
     private func color(for s: LabelState) -> Color {
         switch s {
-        case .active:    return Theme.coral
-        case .completed: return Theme.ink
-        case .upcoming:  return Theme.textSoft
+        case .active: Theme.coral
+        case .completed: Theme.ink
+        case .upcoming: Theme.textSoft
         }
     }
 }

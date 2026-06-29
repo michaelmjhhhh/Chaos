@@ -36,11 +36,10 @@ final class ProviderTests: XCTestCase {
         for provider in Provider.allCases {
             XCTAssertEqual(provider.requiresAPIKey, !keyless.contains(provider), "\(provider)")
             XCTAssertEqual(provider.allowsCustomBaseURL, provider == .openaiCompatible, "\(provider)")
-            let expectedKind: String
-            switch provider {
-            case .ollama: expectedKind = "Local"
-            case .chaosHosted: expectedKind = "Built-in"
-            default: expectedKind = "Remote"
+            let expectedKind = switch provider {
+            case .ollama: "Local"
+            case .chaosHosted: "Built-in"
+            default: "Remote"
             }
             XCTAssertEqual(provider.connectionKind, expectedKind, "\(provider)")
         }

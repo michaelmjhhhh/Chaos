@@ -1,0 +1,25 @@
+# SwiftFormat configuration for Chaos.
+# Tuned to the existing house style: 4-space indent, redundant `self` removed,
+# braces on the same line. Import order is left as authored (Foundation-first),
+# so the sortImports rule is disabled rather than alphabetizing.
+
+--swiftversion 6.0
+
+--indent 4
+--self remove
+--commas inline
+--trimwhitespace always
+--emptybraces no-space
+--ifdef no-indent
+
+# Keep `case .foo(let x)` inline, matching the existing house style.
+--patternlet inline
+
+# Preserve the hand-authored Foundation-first import ordering, and keep explicit
+# `Sendable` conformances the author added intentionally for clarity.
+--disable sortImports,redundantSendable
+
+# Don't hard-wrap existing long lines (kept as a SwiftLint warning instead).
+--maxwidth none
+
+--exclude .build,.git

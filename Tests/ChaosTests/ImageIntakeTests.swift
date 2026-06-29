@@ -17,7 +17,7 @@ final class ImageIntakeTests: XCTestCase {
             URL(fileURLWithPath: "first.PNG"),
             URL(fileURLWithPath: "notes.pdf"),
             URL(fileURLWithPath: "second.heic"),
-            URL(fileURLWithPath: "third.webp"),
+            URL(fileURLWithPath: "third.webp")
         ]
 
         XCTAssertEqual(

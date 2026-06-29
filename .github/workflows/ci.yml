@@ -27,3 +27,20 @@ jobs:
 
       - name: Test
         run: swift test
+
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: brew install swiftformat swiftlint
+
+      # Fails the build if any file isn't formatted (config: .swiftformat).
+      - name: Format check
+        run: swiftformat --lint .
+
+      # Lints using .swiftlint.yml. Not --strict yet: warnings are advisory
+      # for now and will be tightened once the baseline stays clean.
+      - name: Lint
+        run: swiftlint lint

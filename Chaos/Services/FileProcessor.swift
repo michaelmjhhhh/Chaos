@@ -70,7 +70,7 @@ actor FileProcessor {
         apiKey: String,
         model: String
     ) async -> Bool {
-        (try? await apiClient.checkHealth(
+        await (try? apiClient.checkHealth(
             baseURL: baseURL,
             apiKey: apiKey,
             model: model
@@ -88,10 +88,11 @@ actor FileProcessor {
         var previousSize: Int64 = -1
         let fm = FileManager.default
 
-        for _ in 0..<attempts {
+        for _ in 0 ..< attempts {
             if let attrs = try? fm.attributesOfItem(atPath: url.path),
-               let size = attrs[.size] as? Int64 {
-                if size > 0 && size == previousSize {
+               let size = attrs[.size] as? Int64
+            {
+                if size > 0, size == previousSize {
                     return
                 }
                 previousSize = size

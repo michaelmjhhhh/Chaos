@@ -49,7 +49,7 @@ struct HelpView: View {
         HelpTopic(
             question: "Can I change the filename style?",
             answer: "Yes — Settings → Naming & Filing. The template builds names from pieces: {slug} is the AI name, {date} is the day, {time} is the time. The live Preview shows exactly what files will be called."
-        ),
+        )
     ]
 
     private var filtered: [HelpTopic] {

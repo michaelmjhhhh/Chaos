@@ -20,7 +20,8 @@ actor VisionAPIClient {
         let trimmed = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
         guard let url = URL(string: trimmed + "/usage"),
               let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme) else {
+              ["http", "https"].contains(scheme)
+        else {
             throw ChaosError.apiError("Invalid usage URL")
         }
         var request = URLRequest(url: url)
@@ -29,7 +30,7 @@ actor VisionAPIClient {
         request.timeoutInterval = 15
 
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+        guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
             throw ChaosError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
         }
         return try JSONDecoder().decode(HostedUsage.self, from: data)
@@ -55,14 +56,14 @@ actor VisionAPIClient {
                         ["type": "text", "text": userPrompt],
                         [
                             "type": "image_url",
-                            "image_url": ["url": "data:\(mimeType);base64,\(imageBase64)"],
-                        ],
-                    ] as [[String: Any]],
-                ] as [String: Any],
+                            "image_url": ["url": "data:\(mimeType);base64,\(imageBase64)"]
+                        ]
+                    ] as [[String: Any]]
+                ] as [String: Any]
             ] as [[String: Any]],
             // A slug is a handful of words; capping output keeps inference fast.
             "max_tokens": 32,
-            "stream": false,
+            "stream": false
         ]
 
         let url = try endpointURL(baseURL: baseURL)
@@ -76,7 +77,8 @@ actor VisionAPIClient {
         let (data, response) = try await session.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
+              (200 ..< 300).contains(httpResponse.statusCode)
+        else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             throw ChaosError.httpStatus(statusCode)
         }
@@ -92,7 +94,7 @@ actor VisionAPIClient {
         let payload: [String: Any] = [
             "model": model,
             "messages": [["role": "user", "content": "Reply with only: ok"]],
-            "stream": false,
+            "stream": false
         ]
 
         let url = try endpointURL(baseURL: baseURL)
@@ -105,7 +107,8 @@ actor VisionAPIClient {
 
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
-              (200..<300).contains(httpResponse.statusCode) else {
+              (200 ..< 300).contains(httpResponse.statusCode)
+        else {
             return false
         }
         return !data.isEmpty
@@ -114,12 +117,12 @@ actor VisionAPIClient {
     private func slugPrompts(language: SlugLanguage) -> (system: String, user: String) {
         switch language {
         case .zh:
-            return (
+            (
                 "You are a file-naming assistant. Analyze the image and provide a concise, slug-style filename in Simplified Chinese (Chinese characters, numbers, hyphens only). No explanation, no prefix.",
                 "Return only the filename slug in Simplified Chinese."
             )
         case .en:
-            return (
+            (
                 "You are a file-naming assistant. Analyze the image and provide a concise, slug-style English filename (lowercase, numbers, hyphens only). No explanation, no prefix.",
                 "Return only the filename slug."
             )
@@ -131,7 +134,8 @@ actor VisionAPIClient {
               let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
               let host = url.host,
-              !host.isEmpty else {
+              !host.isEmpty
+        else {
             throw ChaosError.apiError("Invalid provider base URL")
         }
 
@@ -148,7 +152,8 @@ actor VisionAPIClient {
         // OpenAI-style: choices[0].message.content
         if let choices = json["choices"] as? [[String: Any]],
            let first = choices.first,
-           let message = first["message"] as? [String: Any] {
+           let message = first["message"] as? [String: Any]
+        {
             if let content = message["content"] as? String {
                 let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty { return trimmed }
@@ -157,7 +162,8 @@ actor VisionAPIClient {
             if let parts = message["content"] as? [[String: Any]] {
                 for part in parts {
                     if part["type"] as? String == "text",
-                       let text = part["text"] as? String {
+                       let text = part["text"] as? String
+                    {
                         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !trimmed.isEmpty { return trimmed }
                     }
@@ -171,14 +177,16 @@ actor VisionAPIClient {
            let content = first["content"] as? [String: Any],
            let parts = content["parts"] as? [[String: Any]],
            let firstPart = parts.first,
-           let text = firstPart["text"] as? String {
+           let text = firstPart["text"] as? String
+        {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty { return trimmed }
         }
 
         // Check for provider error
         if let errorObj = json["error"] as? [String: Any],
-           let msg = errorObj["message"] as? String {
+           let msg = errorObj["message"] as? String
+        {
             throw ChaosError.apiError(msg)
         }
         if let errorStr = json["error"] as? String {

@@ -3,11 +3,17 @@ import SwiftUI
 struct Sparkline: View {
     let values: [Double]
     let caption: String
-    var lastValueText: String? = nil
+    var lastValueText: String?
     var height: CGFloat = 28
 
-    private var minValue: Double { values.min() ?? 0 }
-    private var maxValue: Double { values.max() ?? 1 }
+    private var minValue: Double {
+        values.min() ?? 0
+    }
+
+    private var maxValue: Double {
+        values.max() ?? 1
+    }
+
     private var range: Double {
         let r = maxValue - minValue
         return r > 0 ? r : 1
@@ -35,7 +41,6 @@ struct Sparkline: View {
         }
     }
 
-    @ViewBuilder
     private var chart: some View {
         Canvas { ctx, size in
             guard values.count >= 2, maxValue != minValue else {
@@ -52,7 +57,7 @@ struct Sparkline: View {
 
             var fill = Path()
             fill.move(to: CGPoint(x: 0, y: size.height))
-            for i in 0..<values.count {
+            for i in 0 ..< values.count {
                 fill.addLine(to: pointFor(i))
             }
             fill.addLine(to: CGPoint(x: size.width, y: size.height))
@@ -61,13 +66,12 @@ struct Sparkline: View {
 
             var line = Path()
             line.move(to: pointFor(0))
-            for i in 1..<values.count {
+            for i in 1 ..< values.count {
                 line.addLine(to: pointFor(i))
             }
             ctx.stroke(line, with: .color(Theme.ink), lineWidth: 1)
         }
     }
-
 }
 
 #Preview {

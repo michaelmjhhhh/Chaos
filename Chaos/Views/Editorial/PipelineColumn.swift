@@ -13,7 +13,6 @@ struct PipelineColumn<Content: View>: View {
         }
     }
 
-    @ViewBuilder
     private var header: some View {
         VStack(alignment: .leading, spacing: Theme.sSmall) {
             Text(title)

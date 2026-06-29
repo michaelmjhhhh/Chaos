@@ -52,7 +52,6 @@ struct HeroCard: View {
         }
     }
 
-    @ViewBuilder
     private var idleView: some View {
         VStack(spacing: Theme.sSmall) {
             Spacer()
@@ -126,7 +125,8 @@ struct HeroCard: View {
     private var thumbnail: some View {
         if let path = thumbnailPath,
            !path.isEmpty,
-           let image = NSImage(contentsOfFile: path) {
+           let image = NSImage(contentsOfFile: path)
+        {
             Image(nsImage: image)
                 .resizable()
                 .scaledToFill()
