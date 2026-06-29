@@ -83,6 +83,59 @@ struct SettingsHint: View {
     }
 }
 
+/// A compact, on-brand segmented control for picking the app appearance. Each
+/// segment pairs an SF Symbol with its label; the selected one gets the coral
+/// fill. Adapts to light/dark automatically via the Theme tokens.
+struct AppearanceSelector: View {
+    @Binding var selection: AppearancePreference
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(AppearancePreference.allCases) { option in
+                segment(option)
+            }
+        }
+        .padding(3)
+        .background(Theme.surfaceMuted)
+        .clipShape(.rect(cornerRadius: Theme.r8))
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.r8)
+                .stroke(Theme.border, lineWidth: 0.5)
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: selection)
+    }
+
+    @ViewBuilder
+    private func segment(_ option: AppearancePreference) -> some View {
+        let isSelected = selection == option
+        Button {
+            selection = option
+        } label: {
+            HStack(spacing: Theme.sMicro) {
+                Image(systemName: option.icon)
+                    .font(.system(size: 12))
+                Text(option.label)
+                    .font(Theme.caption)
+            }
+            .foregroundStyle(isSelected ? Theme.onBrand : Theme.textMuted)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: Theme.r6)
+                        .fill(Theme.coral)
+                        .shadow(color: Theme.shadowCard, radius: 2, y: 1)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(option.label)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
 struct SettingsBadge: View {
     let text: String
     let systemImage: String

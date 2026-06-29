@@ -395,14 +395,8 @@ struct SettingsView: View {
             subtitle: "Choose how Chaos looks, or let it follow your Mac."
         ) {
             VStack(alignment: .leading, spacing: Theme.sSmall) {
-                Picker("Appearance", selection: appearanceBinding) {
-                    ForEach(AppearancePreference.allCases) { preference in
-                        Text(preference.label).tag(preference)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .help("System follows your Mac's Light/Dark setting. Light and Dark pin Chaos to that mode.")
+                AppearanceSelector(selection: appearanceBinding)
+                    .help("System follows your Mac's Light/Dark setting. Light and Dark pin Chaos to that mode.")
 
                 SettingsHint(
                     appState.resolvedAppearance == .system

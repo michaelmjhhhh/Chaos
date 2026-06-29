@@ -19,6 +19,15 @@ enum AppearancePreference: String, CaseIterable, Identifiable {
         }
     }
 
+    /// SF Symbol shown alongside the label in the appearance selector.
+    var icon: String {
+        switch self {
+        case .system: "circle.lefthalf.filled"
+        case .light: "sun.max.fill"
+        case .dark: "moon.fill"
+        }
+    }
+
     static func from(_ raw: String?) -> AppearancePreference {
         guard let raw, let value = AppearancePreference(rawValue: raw) else { return .system }
         return value
