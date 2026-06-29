@@ -99,7 +99,6 @@ struct MenuBarView: View {
         .frame(width: 220)
     }
 
-    @ViewBuilder
     private func pillBtn(_ label: String, _ bg: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
@@ -113,7 +112,6 @@ struct MenuBarView: View {
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
     private func menuLink(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {

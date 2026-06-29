@@ -99,7 +99,6 @@ struct SettingsView: View {
     }
 
     /// Lets a user on the bundled hosted tier check how much of their free trial is left.
-    @ViewBuilder
     private var freeTrialRow: some View {
         VStack(alignment: .leading, spacing: Theme.sSmall) {
             Button {
@@ -145,7 +144,6 @@ struct SettingsView: View {
             : "Each screenshot is sent to \(appState.resolvedProvider.displayName) only to generate its name."
     }
 
-    @ViewBuilder
     private var apiKeyField: some View {
         VStack(alignment: .leading, spacing: Theme.sMicro) {
             Text("API Key")
@@ -171,7 +169,6 @@ struct SettingsView: View {
 
     /// Model and Base URL are power-user knobs — hidden by default so the common path
     /// (pick a service, paste a key, test) stays uncluttered for non-technical users.
-    @ViewBuilder
     private var advancedDisclosure: some View {
         DisclosureGroup(isExpanded: $showAdvanced) {
             VStack(alignment: .leading, spacing: Theme.sMed) {
@@ -203,7 +200,7 @@ struct SettingsView: View {
                             .textFieldStyle(.roundedBorder)
                             .help("The web address of your OpenAI-compatible service.")
 
-                        if appState.resolvedProvider.requiresBaseURL && (appState.config.baseURL ?? "").isEmpty {
+                        if appState.resolvedProvider.requiresBaseURL, (appState.config.baseURL ?? "").isEmpty {
                             HStack(spacing: Theme.sMicro) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(Theme.warning)
@@ -211,7 +208,7 @@ struct SettingsView: View {
                                 Text("Required for OpenAI-Compatible")
                                     .foregroundStyle(Theme.textBody)
                             }
-                                .font(Theme.bodySm)
+                            .font(Theme.bodySm)
                         }
                     }
                 } else {
@@ -231,7 +228,6 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder
     private var testRow: some View {
         VStack(alignment: .leading, spacing: Theme.sSmall) {
             Button {
@@ -415,7 +411,6 @@ struct SettingsView: View {
         }
     }
 
-    @ViewBuilder
     private func dirPicker(_ label: String, _ path: Binding<String>) -> some View {
         LabeledContent {
             HStack(spacing: Theme.sSmall) {
@@ -471,7 +466,7 @@ struct SettingsView: View {
             notification: .announcementRequested,
             userInfo: [
                 .announcement: announcement,
-                .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+                .priority: NSAccessibilityPriorityLevel.medium.rawValue
             ]
         )
     }

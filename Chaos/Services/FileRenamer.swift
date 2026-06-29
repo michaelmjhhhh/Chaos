@@ -6,12 +6,11 @@ enum FileRenamer {
         try fm.createDirectory(at: outputDir, withIntermediateDirectories: true)
         let ext = src.pathExtension.isEmpty ? "png" : src.pathExtension.lowercased()
 
-        for i in 0..<100 {
-            let name: String
-            if i == 0 {
-                name = "\(baseName).\(ext)"
+        for i in 0 ..< 100 {
+            let name = if i == 0 {
+                "\(baseName).\(ext)"
             } else {
-                name = "\(baseName)-\(i + 1).\(ext)"
+                "\(baseName)-\(i + 1).\(ext)"
             }
             let dst = outputDir.appendingPathComponent(name)
 
@@ -65,7 +64,7 @@ enum FileRenamer {
     private static func moveToFreeName(from src: URL, inDirectory dir: URL, baseName: String, ext: String) throws -> URL {
         let fm = FileManager.default
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        for i in 0..<100 {
+        for i in 0 ..< 100 {
             let name = i == 0 ? "\(baseName).\(ext)" : "\(baseName)-\(i + 1).\(ext)"
             let dst = dir.appendingPathComponent(name)
             if dst.path == src.path { return src }

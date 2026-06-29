@@ -6,11 +6,12 @@ struct SessionMeta {
 
     init(defaultsKey: String = "chaos.sessionNumber",
          defaults: UserDefaults = .standard,
-         now: Date = Date()) {
+         now: Date = Date())
+    {
         let previous = defaults.integer(forKey: defaultsKey)
         let next = previous + 1
         defaults.set(next, forKey: defaultsKey)
-        self.sessionNumber = next
-        self.startedAt = now
+        sessionNumber = next
+        startedAt = now
     }
 }

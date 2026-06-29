@@ -54,7 +54,8 @@ struct ConfigService {
     private func migrateLegacyConfigIfNeeded() {
         let fm = FileManager.default
         guard !fm.fileExists(atPath: configPath.path),
-              fm.fileExists(atPath: legacyConfigPath.path) else {
+              fm.fileExists(atPath: legacyConfigPath.path)
+        else {
             return
         }
 

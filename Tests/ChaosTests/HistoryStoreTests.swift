@@ -33,7 +33,7 @@ final class HistoryStoreTests: XCTestCase {
     func testSaveKeepsNewestFiveHundredRecords() throws {
         let paths = TemporaryHistoryPaths()
         defer { paths.remove() }
-        let files = (0..<501).map { index in
+        let files = (0 ..< 501).map { index in
             RecentFile(
                 originalName: "Screenshot-\(index).png",
                 newName: "file-\(index).png",

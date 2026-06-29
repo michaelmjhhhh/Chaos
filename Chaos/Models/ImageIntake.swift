@@ -2,7 +2,7 @@ import Foundation
 
 enum ImageIntake {
     private static let supportedExtensions: Set<String> = [
-        "png", "jpg", "jpeg", "heic", "webp",
+        "png", "jpg", "jpeg", "heic", "webp"
     ]
 
     static func accepts(url: URL) -> Bool {

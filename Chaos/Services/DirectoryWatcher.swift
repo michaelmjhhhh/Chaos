@@ -9,7 +9,7 @@ final class DirectoryWatcher: @unchecked Sendable {
     private var onNewFile: ((URL) -> Void)?
 
     init(directory: URL) {
-        self.watchURL = directory
+        watchURL = directory
     }
 
     @discardableResult
@@ -32,9 +32,9 @@ final class DirectoryWatcher: @unchecked Sendable {
         }
 
         source.setCancelHandler { [weak self] in
-            guard let self, self.fileDescriptor >= 0 else { return }
-            close(self.fileDescriptor)
-            self.fileDescriptor = -1
+            guard let self, fileDescriptor >= 0 else { return }
+            close(fileDescriptor)
+            fileDescriptor = -1
         }
 
         self.source = source

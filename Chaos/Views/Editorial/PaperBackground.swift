@@ -12,8 +12,8 @@ struct PaperBackground: View {
                 let rows = Int(size.height / cellSize) + 1
                 var rng = SeededRandom(seed: 0xA1B2C3)
 
-                for x in 0..<columns {
-                    for y in 0..<rows {
+                for x in 0 ..< columns {
+                    for y in 0 ..< rows {
                         let n = rng.nextDouble()
                         guard n > 0.88 else { continue }
                         let opacity = (n - 0.88) * 0.5
@@ -40,11 +40,11 @@ private struct SeededRandom {
     private var state: UInt64
 
     init(seed: UInt64) {
-        self.state = seed
+        state = seed
     }
 
     mutating func nextDouble() -> Double {
-        state = state &* 6364136223846793005 &+ 1442695040888963407
+        state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
         return Double(state >> 11) / Double(UInt64(1) << 53)
     }
 }

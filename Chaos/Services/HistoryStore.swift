@@ -21,7 +21,8 @@ struct HistoryStore: Sendable {
 
     func load() -> [RecentFile] {
         guard let data = try? Data(contentsOf: historyURL),
-              let files = try? JSONDecoder().decode([RecentFile].self, from: data) else {
+              let files = try? JSONDecoder().decode([RecentFile].self, from: data)
+        else {
             return []
         }
         return Array(files.prefix(limit))

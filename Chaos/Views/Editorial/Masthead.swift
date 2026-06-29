@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct Masthead: View {
-    var status: WatcherStatus? = nil
+    var status: WatcherStatus?
     let date: Date
 
     private var dateText: String {
@@ -35,7 +35,6 @@ struct Masthead: View {
         }
     }
 
-    @ViewBuilder
     private func statusPill(_ status: WatcherStatus) -> some View {
         HStack(spacing: 5) {
             Circle()

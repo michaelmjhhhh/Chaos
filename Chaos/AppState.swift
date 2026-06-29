@@ -5,7 +5,7 @@ import SwiftUI
 final class AppState {
     var watcherStatus: WatcherStatus = .stopped
     var watcherStartedAt: Date?
-    var config: AppConfig = AppConfig()
+    var config: AppConfig = .init()
     var currentFile: String?
     var currentStage: ProcessingStage?
     var recentFiles: [RecentFile] = []
@@ -72,7 +72,8 @@ final class AppState {
 
     var startupValidationError: String? {
         guard resolvedProvider.requiresAPIKey,
-              resolvedAPIKey.trimmingCharacters(in: .whitespaces).isEmpty else {
+              resolvedAPIKey.trimmingCharacters(in: .whitespaces).isEmpty
+        else {
             return nil
         }
         return "API key not configured"
@@ -130,7 +131,7 @@ final class AppState {
         let slugs = recentFiles
             .filter { !$0.isError }
             .filter { calendar.startOfDay(for: $0.timestamp) == today }
-            .map { $0.newName }
+            .map(\.newName)
         return Tokenizer.topNouns(from: slugs, limit: 5)
     }
 
@@ -243,7 +244,8 @@ final class AppState {
     func retry(_ file: RecentFile) {
         let sourceURL = URL(fileURLWithPath: file.sourcePath)
         guard !file.sourcePath.isEmpty,
-              FileManager.default.fileExists(atPath: sourceURL.path) else {
+              FileManager.default.fileExists(atPath: sourceURL.path)
+        else {
             record(RecentFile(
                 originalName: file.originalName,
                 newName: "",

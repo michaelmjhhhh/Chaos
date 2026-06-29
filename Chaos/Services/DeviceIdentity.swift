@@ -21,7 +21,9 @@ enum DeviceIdentity {
     private static let cached: String = computeHash()
 
     /// Lowercase hex SHA-256 used to identify this device to the hosted proxy.
-    static var hash: String { cached }
+    static var hash: String {
+        cached
+    }
 
     private static func computeHash() -> String {
         let seed = hardwareUUID() ?? keychainFallbackUUID()
@@ -67,7 +69,7 @@ enum DeviceIdentity {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: keychainAccount,
+            kSecAttrAccount as String: keychainAccount
         ]
     }
 
@@ -79,7 +81,8 @@ enum DeviceIdentity {
         var item: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
               let data = item as? Data,
-              let value = String(data: data, encoding: .utf8) else {
+              let value = String(data: data, encoding: .utf8)
+        else {
             return nil
         }
         return value
