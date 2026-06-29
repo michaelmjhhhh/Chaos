@@ -1,6 +1,17 @@
 import SwiftUI
 import AppKit
 
+/// Formatters and calendar are expensive to allocate, so cache them once rather
+/// than rebuilding them every time the history list re-renders.
+private enum FiledFormatters {
+    static let calendar = Calendar.current
+    static let dayMonth: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM"
+        return f
+    }()
+}
+
 struct FiledColumn: View {
     let files: [RecentFile]
     @Binding var searchText: String
@@ -13,6 +24,11 @@ struct FiledColumn: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Search is applied from a debounced, pre-lowercased copy of `searchText`
+    /// so filtering doesn't run on every keystroke.
+    @State private var debouncedQuery: String = ""
+    @State private var debounceTask: Task<Void, Never>?
+
     enum Filter: String, CaseIterable {
         case all = "ALL"
         case errors = "ERRORS"
@@ -20,25 +36,22 @@ struct FiledColumn: View {
     }
 
     private var visible: [RecentFile] {
-        var result = files
-        if filter == .errors { result = result.filter(\.isError) }
-        if filter == .today {
-            let today = Calendar.current.startOfDay(for: Date())
-            result = result.filter { Calendar.current.startOfDay(for: $0.timestamp) == today }
-        }
-        if !searchText.isEmpty {
-            let q = searchText.lowercased()
-            result = result.filter {
-                $0.newName.lowercased().contains(q) ||
-                $0.originalName.lowercased().contains(q) ||
-                ($0.isError && $0.resultText.lowercased().contains(q))
+        let cal = FiledFormatters.calendar
+        let today = cal.startOfDay(for: Date())
+        let q = debouncedQuery
+        return files.filter { file in
+            switch filter {
+            case .all: break
+            case .errors: if !file.isError { return false }
+            case .today: if cal.startOfDay(for: file.timestamp) != today { return false }
             }
+            if !q.isEmpty, !file.searchKey.contains(q) { return false }
+            return true
         }
-        return result
     }
 
     private var grouped: [(label: String, items: [RecentFile])] {
-        let cal = Calendar.current
+        let cal = FiledFormatters.calendar
         let today = cal.startOfDay(for: Date())
         let yesterday = cal.date(byAdding: .day, value: -1, to: today) ?? today
 
@@ -53,8 +66,7 @@ struct FiledColumn: View {
             else { earlierItems.append(f) }
         }
 
-        let df = DateFormatter()
-        df.dateFormat = "d MMM"
+        let df = FiledFormatters.dayMonth
 
         var sections: [(String, [RecentFile])] = []
         if !todayItems.isEmpty {
@@ -76,6 +88,19 @@ struct FiledColumn: View {
                     .padding(.bottom, Theme.sMed)
             }
             content
+        }
+        .onChange(of: searchText) { _, newValue in
+            debounceTask?.cancel()
+            // Clearing the field should feel instant; only debounce typing.
+            if newValue.isEmpty {
+                debouncedQuery = ""
+                return
+            }
+            let query = newValue.lowercased()
+            debounceTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(150))
+                if !Task.isCancelled { debouncedQuery = query }
+            }
         }
     }
 

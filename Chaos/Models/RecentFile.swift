@@ -46,4 +46,13 @@ struct RecentFile: Identifiable, Codable, Equatable, Sendable {
         case .error(let msg): msg
         }
     }
+
+    /// Lowercased, concatenated searchable fields for fast case-insensitive
+    /// matching. The error message is only included for errors, matching the
+    /// search behaviour the history list expects.
+    var searchKey: String {
+        var key = "\(newName) \(originalName)"
+        if isError { key += " \(resultText)" }
+        return key.lowercased()
+    }
 }
