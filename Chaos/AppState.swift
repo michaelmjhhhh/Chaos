@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -100,6 +101,10 @@ final class AppState {
         config.notifyOnComplete ?? false
     }
 
+    var resolvedAppearance: AppearancePreference {
+        AppearancePreference.from(config.appearance)
+    }
+
     var resolvedNamingPolicy: NamingPolicy {
         NamingPolicy(
             template: config.filenameTemplate,
@@ -145,10 +150,28 @@ final class AppState {
     func loadConfig() {
         config = configService.load()
         recentFiles = historyStore.load()
+        applyAppearance()
     }
 
     func saveConfig() {
         try? configService.save(config)
+    }
+
+    /// Update the app's light/dark appearance preference and apply it immediately.
+    /// `.system` is stored as nil to keep the config file clean (the default).
+    func setAppearance(_ preference: AppearancePreference) {
+        config.appearance = preference == .system ? nil : preference.rawValue
+        applyAppearance()
+    }
+
+    /// Force the app's appearance to the saved preference, or follow the system
+    /// when `.system`. The adaptive Theme colors resolve against this.
+    func applyAppearance() {
+        switch resolvedAppearance {
+        case .system: NSApplication.shared.appearance = nil
+        case .light: NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        }
     }
 
     func selectProvider(_ provider: Provider) {
