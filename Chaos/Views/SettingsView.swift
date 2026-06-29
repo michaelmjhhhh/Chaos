@@ -19,6 +19,7 @@ struct SettingsView: View {
                 directoriesCard
                 outputCard
                 behaviorCard
+                appearanceCard
                 configurationCard
             }
             .frame(maxWidth: 680)
@@ -392,6 +393,30 @@ struct SettingsView: View {
         }
     }
 
+    private var appearanceCard: some View {
+        SettingsCard(
+            title: "Appearance",
+            subtitle: "Choose how Chaos looks, or let it follow your Mac."
+        ) {
+            VStack(alignment: .leading, spacing: Theme.sSmall) {
+                Picker("Appearance", selection: appearanceBinding) {
+                    ForEach(AppearancePreference.allCases) { preference in
+                        Text(preference.label).tag(preference)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .help("System follows your Mac's Light/Dark setting. Light and Dark pin Chaos to that mode.")
+
+                SettingsHint(
+                    appState.resolvedAppearance == .system
+                        ? "Following your Mac's appearance."
+                        : "Chaos stays in \(appState.resolvedAppearance.label) mode regardless of your Mac."
+                )
+            }
+        }
+    }
+
     private var configurationCard: some View {
         SettingsCard(
             title: "Configuration",
@@ -535,6 +560,13 @@ struct SettingsView: View {
         Binding(
             get: { SubfolderRule.from(appState.config.subfolderRule) },
             set: { appState.config.subfolderRule = $0.rawValue }
+        )
+    }
+
+    private var appearanceBinding: Binding<AppearancePreference> {
+        Binding(
+            get: { appState.resolvedAppearance },
+            set: { appState.setAppearance($0) }
         )
     }
 }
