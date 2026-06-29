@@ -186,7 +186,7 @@ struct WelcomeView: View {
         } label: {
             Text(step == .ready ? "Start Watching" : "Continue")
                 .font(Theme.button)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 8)
                 .background(continueEnabled ? Theme.coral : Theme.coral.opacity(0.4))

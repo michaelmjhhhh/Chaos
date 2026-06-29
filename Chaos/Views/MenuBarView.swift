@@ -104,7 +104,7 @@ struct MenuBarView: View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 3)
                 .background(bg)
