@@ -103,7 +103,7 @@ struct DashboardView: View {
                     Image(systemName: "stop.fill").font(.system(size: 8))
                     Text("Stop").font(Theme.button)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
                 .background(Theme.error)
@@ -117,7 +117,7 @@ struct DashboardView: View {
                     Image(systemName: "play.fill").font(.system(size: 9))
                     Text("Start Watching").font(Theme.button)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.onBrand)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 7)
                 .background(Theme.coral)

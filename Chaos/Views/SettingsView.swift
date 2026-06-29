@@ -242,7 +242,7 @@ struct SettingsView: View {
                     systemImage: isTesting ? "clock" : "bolt.horizontal.circle"
                 )
                 .font(Theme.button)
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.canvas)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .background(isTesting ? Theme.ink.opacity(0.6) : Theme.ink)

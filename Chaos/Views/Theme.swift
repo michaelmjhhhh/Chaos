@@ -1,35 +1,41 @@
 import SwiftUI
+import AppKit
 
 enum Theme {
+    // Colors are defined as light/dark pairs so the whole app adapts to the
+    // system appearance automatically — call sites stay unchanged.
+
     // MARK: - Brand
-    static let coral = Color(hex: 0xCC785C)
-    static let coralHover = Color(hex: 0xB8694F)
-    static let coralActive = Color(hex: 0xA9583E)
+    static let coral = Color(light: 0xCC785C, dark: 0xD98E6B)
+    static let coralHover = Color(light: 0xB8694F, dark: 0xE49C79)
+    static let coralActive = Color(light: 0xA9583E, dark: 0xF0A985)
+    /// Text/glyphs that sit on top of the coral brand fill (both appearances).
+    static let onBrand = Color(light: 0xFFFFFF, dark: 0xFFFFFF)
 
     // MARK: - Surfaces
-    static let canvas = Color(hex: 0xFAF9F5)
-    static let surfaceCard = Color(hex: 0xFFFFFF)
-    static let surfaceMuted = Color(hex: 0xF5F0E8)
-    static let surfaceDark = Color(hex: 0x1A1918)
-    static let surfaceDarkElevated = Color(hex: 0x262523)
+    static let canvas = Color(light: 0xFAF9F5, dark: 0x1A1918)
+    static let surfaceCard = Color(light: 0xFFFFFF, dark: 0x262523)
+    static let surfaceMuted = Color(light: 0xF5F0E8, dark: 0x201F1D)
+    static let surfaceDark = Color(light: 0x1A1918, dark: 0x121110)
+    static let surfaceDarkElevated = Color(light: 0x262523, dark: 0x2E2C2A)
 
     // MARK: - Text
-    static let ink = Color(hex: 0x141413)
-    static let textBody = Color(hex: 0x3D3D3A)
-    static let textMuted = Color(hex: 0x6C6A64)
-    static let textSoft = Color(hex: 0x8E8B82)
-    static let textOnDark = Color(hex: 0xFAF9F5)
+    static let ink = Color(light: 0x141413, dark: 0xF2F0EA)
+    static let textBody = Color(light: 0x3D3D3A, dark: 0xCFCBC2)
+    static let textMuted = Color(light: 0x6C6A64, dark: 0x9C9890)
+    static let textSoft = Color(light: 0x8E8B82, dark: 0x7C7972)
+    static let textOnDark = Color(light: 0xFAF9F5, dark: 0xFAF9F5)
 
     // MARK: - Semantic
-    static let success = Color(hex: 0x4DA664)
-    static let warning = Color(hex: 0xD4A017)
-    static let error = Color(hex: 0xC64545)
-    static let teal = Color(hex: 0x5DB8A6)
+    static let success = Color(light: 0x4DA664, dark: 0x5FBE79)
+    static let warning = Color(light: 0xD4A017, dark: 0xE0B53A)
+    static let error = Color(light: 0xC64545, dark: 0xE06B6B)
+    static let teal = Color(light: 0x5DB8A6, dark: 0x6FCDBA)
 
     // MARK: - Borders & Lines
-    static let border = Color(hex: 0xE2DDD4)
-    static let borderLight = Color(hex: 0xEBE6DF)
-    static let divider = Color(hex: 0xE6DFD8)
+    static let border = Color(light: 0xE2DDD4, dark: 0x3A3833)
+    static let borderLight = Color(light: 0xEBE6DF, dark: 0x322F2B)
+    static let divider = Color(light: 0xE6DFD8, dark: 0x35332E)
 
     // MARK: - Display (Serif — weight 400, negative tracking)
     static let displayXL = Font.system(size: 32, weight: .regular, design: .serif)
@@ -58,14 +64,17 @@ enum Theme {
     static let r12: CGFloat = 12
 
     // MARK: - Shadows
-    static let shadowCard = Color.black.opacity(0.04)
-    static let shadowMd = Color.black.opacity(0.06)
+    // Shadows need more weight on dark surfaces to remain visible.
+    static let shadowCard = Color(lightBlack: 0.04, darkBlack: 0.45)
+    static let shadowMd = Color(lightBlack: 0.06, darkBlack: 0.55)
 
     // MARK: - Editorial additions
 
-    static let warmInk = Color(hex: 0x1F1E1B)
-    static let rule = Color(hex: 0xD5CFC4)
-    static let paperTint = Color.black.opacity(0.06)
+    static let warmInk = Color(light: 0x1F1E1B, dark: 0xEDEAE3)
+    static let rule = Color(light: 0xD5CFC4, dark: 0x3F3C36)
+    /// Subtle zone tint on cards: darkens slightly in light mode, lightens in dark.
+    static let paperTint = Color(lightOverlay: (white: 0, alpha: 0.06),
+                                 darkOverlay: (white: 1, alpha: 0.05))
 
     // MARK: - Editorial type
 
@@ -169,5 +178,48 @@ extension Color {
             green: Double((hex >> 8) & 0xFF) / 255.0,
             blue: Double(hex & 0xFF) / 255.0
         )
+    }
+
+    /// A color that resolves to `light` in light appearance and `dark` in dark
+    /// appearance. Backed by a dynamic NSColor so it updates live when the user
+    /// switches the system theme, without threading `colorScheme` through views.
+    init(light: UInt32, dark: UInt32) {
+        self.init(nsColor: NSColor(name: nil) { appearance in
+            appearance.isDark ? NSColor(hex: dark) : NSColor(hex: light)
+        })
+    }
+
+    /// Adaptive black overlay (e.g. shadows) with per-appearance opacity.
+    init(lightBlack: Double, darkBlack: Double) {
+        self.init(nsColor: NSColor(name: nil) { appearance in
+            NSColor(white: 0, alpha: appearance.isDark ? darkBlack : lightBlack)
+        })
+    }
+
+    /// Adaptive grayscale overlay (white + alpha) that differs by appearance.
+    init(lightOverlay: (white: CGFloat, alpha: CGFloat),
+         darkOverlay: (white: CGFloat, alpha: CGFloat)) {
+        self.init(nsColor: NSColor(name: nil) { appearance in
+            let o = appearance.isDark ? darkOverlay : lightOverlay
+            return NSColor(white: o.white, alpha: o.alpha)
+        })
+    }
+}
+
+extension NSColor {
+    convenience init(hex: UInt32) {
+        self.init(
+            srgbRed: Double((hex >> 16) & 0xFF) / 255.0,
+            green: Double((hex >> 8) & 0xFF) / 255.0,
+            blue: Double(hex & 0xFF) / 255.0,
+            alpha: 1
+        )
+    }
+}
+
+extension NSAppearance {
+    /// Whether this appearance is one of the dark (Dark Aqua) variants.
+    var isDark: Bool {
+        bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 }
