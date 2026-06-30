@@ -32,7 +32,8 @@ struct PipelineView: View {
                         searchFocused: $searchFocused,
                         onRetry: appState.retry,
                         onRevert: appState.revert,
-                        onRename: beginRename
+                        onRename: beginRename,
+                        onRetryAll: appState.retryAllFailures
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
@@ -87,13 +88,26 @@ struct PipelineView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
+            if let batch = appState.batchProgress {
+                Text("\(batch.index) of \(batch.total)")
+                    .font(Theme.captionSm)
+                    .tracking(0.5)
+                    .foregroundStyle(Theme.textSoft)
+            }
         }
         .padding(.horizontal, Theme.sMed)
         .padding(.vertical, Theme.sSmall)
         .background(Theme.surfaceMuted)
         .clipShape(.rect(cornerRadius: Theme.r8))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(live.stage) \(live.file)")
+        .accessibilityLabel(liveStripLabel(live))
+    }
+
+    private func liveStripLabel(_ live: (stage: String, file: String)) -> String {
+        if let batch = appState.batchProgress {
+            return "\(live.stage) \(live.file), \(batch.index) of \(batch.total)"
+        }
+        return "\(live.stage) \(live.file)"
     }
 
     // MARK: - Rename

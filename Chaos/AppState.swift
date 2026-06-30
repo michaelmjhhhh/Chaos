@@ -9,6 +9,8 @@ final class AppState {
     var config: AppConfig = .init()
     var currentFile: String?
     var currentStage: ProcessingStage?
+    /// While a manual/batch run is in flight, the 1-based index and total; nil otherwise.
+    var batchProgress: (index: Int, total: Int)?
     var recentFiles: [RecentFile] = []
     var apiStatus: String = "N/A"
 
@@ -289,11 +291,40 @@ final class AppState {
     func processManualURLs(_ urls: [URL]) {
         let accepted = ImageIntake.acceptedURLs(from: urls)
         guard !accepted.isEmpty else { return }
+        processBatch(accepted)
+    }
 
+    /// Failed history entries that can be re-run because their original image is still
+    /// on disk, de-duplicated by source path (the same source can appear after retries).
+    var retryableFailures: [RecentFile] {
+        var seen = Set<String>()
+        return recentFiles.filter { file in
+            guard file.isError,
+                  !file.sourcePath.isEmpty,
+                  FileManager.default.fileExists(atPath: file.sourcePath),
+                  !seen.contains(file.sourcePath)
+            else { return false }
+            seen.insert(file.sourcePath)
+            return true
+        }
+    }
+
+    func retryAllFailures() {
+        let urls = retryableFailures.map { URL(fileURLWithPath: $0.sourcePath) }
+        guard !urls.isEmpty else { return }
+        processBatch(urls)
+    }
+
+    /// Run a set of images through the pipeline one at a time, publishing N-of-M
+    /// progress for the UI. Shared by drag-drop, the Organize picker, and Retry all.
+    private func processBatch(_ urls: [URL]) {
         Task {
-            for url in accepted {
+            let total = urls.count
+            for (i, url) in urls.enumerated() {
+                batchProgress = (index: i + 1, total: total)
                 await processInput(url: url)
             }
+            batchProgress = nil
         }
     }
 
