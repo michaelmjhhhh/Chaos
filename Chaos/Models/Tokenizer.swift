@@ -10,6 +10,12 @@ enum Tokenizer {
     ]
 
     static func topNouns(from slugs: [String], limit: Int) -> [String] {
+        topNounCounts(from: slugs, limit: limit).map(\.token)
+    }
+
+    /// Same ranking as `topNouns`, but keeps each token's frequency — used by the Insights
+    /// "Top categories" bars, which need the counts to size the bars.
+    static func topNounCounts(from slugs: [String], limit: Int) -> [(token: String, count: Int)] {
         guard limit > 0 else { return [] }
 
         var counts: [String: Int] = [:]
@@ -27,7 +33,7 @@ enum Tokenizer {
                 return lhs.key < rhs.key
             }
             .prefix(limit)
-            .map(\.key)
+            .map { (token: $0.key, count: $0.value) }
     }
 
     private static func tokens(in slug: String) -> [String] {

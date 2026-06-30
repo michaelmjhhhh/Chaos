@@ -18,6 +18,10 @@ final class AppState {
     var hourlyThroughput: [Int] = Array(repeating: 0, count: 24)
     var successWindow: [Double] = []
 
+    /// Bumped after any durable history change (record, revert, rename) completes. The Insights
+    /// page watches this to know when to recompute its snapshot.
+    private(set) var historyRevision = 0
+
     var totalProcessed: Int = 0
     var successes: Int = 0
     var errors: Int = 0
@@ -37,9 +41,17 @@ final class AppState {
     @ObservationIgnored private var watcher: DirectoryWatcher?
     @ObservationIgnored private let processor = FileProcessor()
     @ObservationIgnored private let configService = ConfigService()
-    @ObservationIgnored private let historyStore = HistoryStore()
+    /// Opened lazily in `loadConfig()` rather than `init` so unit tests that construct
+    /// `AppState` directly don't touch the on-disk database.
+    @ObservationIgnored private var historyDatabase: HistoryDatabase?
     @ObservationIgnored private var apiHealthCheckID = UUID()
     @ObservationIgnored private var batchTask: Task<Void, Never>?
+
+    /// Read-only analytics over the full history, backed by the same database queue used for
+    /// writes. Nil until the database is opened.
+    var insightsRepository: InsightsRepository? {
+        historyDatabase.map { InsightsRepository(dbQueue: $0.dbQueue) }
+    }
 
     var isWatching: Bool {
         if case .running = watcherStatus { return true }
@@ -166,8 +178,27 @@ final class AppState {
 
     func loadConfig() {
         config = configService.load()
-        recentFiles = historyStore.load()
         applyAppearance()
+        openHistoryDatabaseIfNeeded()
+        loadRecentFiles()
+    }
+
+    private func openHistoryDatabaseIfNeeded() {
+        guard historyDatabase == nil else { return }
+        do {
+            historyDatabase = try HistoryDatabase()
+        } catch {
+            apiStatus = "HISTORY FAIL"
+        }
+    }
+
+    /// Load the most-recent working set for the Dashboard and Pipeline. Insights reads the full
+    /// table separately via `insightsRepository`.
+    private func loadRecentFiles() {
+        guard let db = historyDatabase else { return }
+        Task {
+            recentFiles = await (try? db.recentFiles(limit: 500)) ?? []
+        }
     }
 
     func saveConfig() {
@@ -443,7 +474,7 @@ final class AppState {
         do {
             try FileRenamer.revert(from: current, toOriginalPath: file.sourcePath)
             recentFiles.removeAll { $0.id == file.id }
-            saveHistory()
+            persist { try await $0.delete(id: file.id) }
         } catch {
             lastError = FriendlyError(message: "Couldn't undo that filing.", action: .none)
         }
@@ -477,7 +508,7 @@ final class AppState {
                     duration: old.duration,
                     result: old.result
                 )
-                saveHistory()
+                persist { try await $0.update(id: old.id, newName: dst.lastPathComponent, path: dst.path) }
             }
         } catch {
             lastError = FriendlyError(message: "Couldn't rename that file.", action: .none)
@@ -485,24 +516,29 @@ final class AppState {
     }
 
     private func record(_ entry: RecentFile) {
+        // Keep the in-memory working set responsive immediately; the database write happens
+        // off the main thread via GRDB's queue.
         recentFiles.insert(entry, at: 0)
         if recentFiles.count > 500 {
             recentFiles = Array(recentFiles.prefix(500))
         }
-        saveHistory()
+        persist { try await $0.insert(entry) }
     }
 
-    /// Persist history off the hot path. Writing JSON after every filed screenshot
-    /// shouldn't block the next one or the UI, so it runs on a background task against a
-    /// snapshot of the current list.
-    private func saveHistory() {
-        let snapshot = recentFiles
-        let store = historyStore
-        Task.detached(priority: .utility) {
+    /// Run a durable history mutation against the database off the hot path, then signal the
+    /// Insights page to refresh. A write failure surfaces the same `"HISTORY FAIL"` status the
+    /// old JSON path used.
+    private func persist(_ change: @escaping (HistoryDatabase) async throws -> Void) {
+        guard let db = historyDatabase else {
+            apiStatus = "HISTORY FAIL"
+            return
+        }
+        Task {
             do {
-                try store.save(snapshot)
+                try await change(db)
+                historyRevision += 1
             } catch {
-                await MainActor.run { [weak self] in self?.apiStatus = "HISTORY FAIL" }
+                apiStatus = "HISTORY FAIL"
             }
         }
     }
