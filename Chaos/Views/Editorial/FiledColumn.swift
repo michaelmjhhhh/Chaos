@@ -21,6 +21,7 @@ struct FiledColumn: View {
     var onRetry: (RecentFile) -> Void = { _ in }
     var onRevert: (RecentFile) -> Void = { _ in }
     var onRename: (RecentFile) -> Void = { _ in }
+    var onRetryAll: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -108,6 +109,15 @@ struct FiledColumn: View {
         HStack(spacing: Theme.sMed) {
             searchField
             Spacer()
+            if filter == .errors, files.contains(where: \.isError) {
+                Button(action: onRetryAll) {
+                    Label("Retry all", systemImage: "arrow.clockwise")
+                        .font(Theme.captionSm)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Theme.coral)
+                .help("Re-run every failed image whose original is still available.")
+            }
             filterChips
         }
     }
