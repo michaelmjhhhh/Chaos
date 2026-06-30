@@ -16,7 +16,7 @@ struct ContentView: View {
                 PipelineView()
             }
         }
-        .frame(minWidth: 760, minHeight: 540)
+        .frame(minWidth: 520, minHeight: 540)
         .onAppear {
             if !appState.hasCompletedOnboarding {
                 showOnboarding = true

@@ -42,7 +42,7 @@ struct PipelineView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
-        .frame(minWidth: 760, minHeight: 540)
+        .frame(minWidth: 520, minHeight: 540)
         .sheet(item: $renameTarget) { file in
             renameSheet(for: file)
         }
