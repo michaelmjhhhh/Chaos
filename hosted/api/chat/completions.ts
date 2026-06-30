@@ -24,6 +24,14 @@ const MODEL = process.env.MODEL ?? "agnes-2.0-flash";
 const AGNES_BASE_URL = (process.env.AGNES_BASE_URL ?? "https://apihub.agnes-ai.com/v1").replace(/\/+$/, "");
 const BUDGET_TTL_SECONDS = 60 * 60 * 24 * 35; // ~35 days, covers one billing month
 
+// Per-call cost ceilings. The app token is public (baked into the app), so a caller can
+// reach this endpoint directly. The per-device + global counters cap how *many* calls run;
+// these cap how *expensive* each call can be, so one request can't be inflated into many
+// completions or a huge generation. Naming a screenshot needs only a short answer.
+const MAX_OUTPUT_TOKENS = 512;
+const DEFAULT_OUTPUT_TOKENS = 256;
+const MAX_MESSAGES = 16;
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json(errorBody("Method not allowed"));
@@ -67,12 +75,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // 4. Forward to Agnes AI with the server-held key, pinning the model.
+  // 4. Forward to Agnes AI with the server-held key, pinning the model and clamping the
+  //    cost-bearing parameters the caller controls.
   const body = (req.body ?? {}) as Record<string, unknown>;
   if (!Array.isArray(body.messages)) {
     res.status(400).json(errorBody("Invalid request body"));
     return;
   }
+  if (body.messages.length > MAX_MESSAGES) {
+    res.status(400).json(errorBody("Too many messages"));
+    return;
+  }
+
+  // Honour a smaller caller-supplied limit, but never exceed our ceiling. Strip
+  // max_completion_tokens so it can't be used to bypass the max_tokens cap.
+  const requestedMax = Math.max(toInt(body.max_tokens), toInt(body.max_completion_tokens));
+  const maxTokens = requestedMax > 0 ? Math.min(requestedMax, MAX_OUTPUT_TOKENS) : DEFAULT_OUTPUT_TOKENS;
+  const { max_completion_tokens: _strip, ...rest } = body;
+  const forwardBody = { ...rest, model: MODEL, stream: false, n: 1, max_tokens: maxTokens };
 
   let upstream: Response;
   try {
@@ -82,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
         "Content-Type": "application/json",
         Authorization: `Bearer ${AGNES_API_KEY}`,
       },
-      body: JSON.stringify({ ...body, model: MODEL, stream: false }),
+      body: JSON.stringify(forwardBody),
     });
   } catch {
     res.status(502).json(errorBody("Naming service is unreachable. Try again."));
@@ -125,10 +145,13 @@ function intEnv(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function toInt(value: number | string | null): number {
-  if (value === null || value === undefined) return 0;
-  const n = typeof value === "number" ? value : Number.parseInt(value, 10);
-  return Number.isFinite(n) ? n : 0;
+function toInt(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const n = Number.parseInt(value, 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
 }
 
 function errorBody(message: string) {

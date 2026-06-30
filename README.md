@@ -158,3 +158,11 @@ Chaos stores its configuration at:
 ```
 
 On first launch, Chaos imports an existing `vibe-shot` CLI configuration when one is available.
+
+## Security
+
+Found a security issue? Please report it privately — see [SECURITY.md](SECURITY.md).
+
+## License
+
+Chaos is open source under the [MIT License](LICENSE).
