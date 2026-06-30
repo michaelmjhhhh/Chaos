@@ -162,11 +162,11 @@ struct InsightsRepository: Sendable {
         let index = Int(Double(sorted.count - 1) * 0.95 + 0.5)
         let p95 = sorted[min(index, sorted.count - 1)]
 
-        return Performance(
+        return try Performance(
             avg: avg,
             p95: p95,
-            fastest: try durationRecord(db, ascending: true),
-            slowest: try durationRecord(db, ascending: false)
+            fastest: durationRecord(db, ascending: true),
+            slowest: durationRecord(db, ascending: false)
         )
     }
 

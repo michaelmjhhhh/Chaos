@@ -15,7 +15,8 @@ struct FolderRoute: View {
     var body: some View {
         Grid(alignment: .leadingFirstTextBaseline,
              horizontalSpacing: 14,
-             verticalSpacing: Theme.sMed) {
+             verticalSpacing: Theme.sMed)
+        {
             GridRow {
                 node(.origin)
                 stop(role: "WATCH", path: watchPath)
@@ -42,7 +43,6 @@ struct FolderRoute: View {
 
     private enum Node { case origin, terminus }
 
-    @ViewBuilder
     private func node(_ kind: Node) -> some View {
         Group {
             switch kind {
