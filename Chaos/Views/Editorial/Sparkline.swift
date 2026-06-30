@@ -23,6 +23,21 @@ struct Sparkline: View {
         values.count >= 2 && maxValue != minValue
     }
 
+    /// A spoken summary of the chart for VoiceOver, since the Canvas-drawn trend is
+    /// otherwise invisible to assistive tech.
+    var accessibilitySummary: String {
+        guard hasData else { return "No data yet." }
+        let latest = lastValueText.map { "latest \($0), " } ?? ""
+        return "\(latest)\(values.count) points, trending \(trendDescription)."
+    }
+
+    private var trendDescription: String {
+        guard let first = values.first, let last = values.last else { return "flat" }
+        if last > first { return "up" }
+        if last < first { return "down" }
+        return "flat"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sMicro) {
             HStack(alignment: .firstTextBaseline) {
@@ -39,6 +54,9 @@ struct Sparkline: View {
                 chart.frame(height: height)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(caption)
+        .accessibilityValue(accessibilitySummary)
     }
 
     private var chart: some View {

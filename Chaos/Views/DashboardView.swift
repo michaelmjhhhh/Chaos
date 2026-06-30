@@ -204,6 +204,7 @@ struct DashboardView: View {
                 appState.processManualURLs(urls)
                 return !ImageIntake.acceptedURLs(from: urls).isEmpty
             }
+            .accessibilityHint("Drop images here to rename them")
 
             Button(action: organizeExistingScreenshots) {
                 Label("Organize Existing Screenshots", systemImage: "photo.on.rectangle.angled")
@@ -286,6 +287,7 @@ struct DashboardView: View {
     private func directoryRow(icon: AnyView, label: String, path: String) -> some View {
         HStack(alignment: .center, spacing: Theme.sSmall) {
             icon
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(label).smallCaps().foregroundStyle(Theme.textSoft)
                 Text(abbrev(path))
@@ -295,6 +297,8 @@ struct DashboardView: View {
                     .truncationMode(.middle)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label) folder: \(abbrev(path))")
     }
 
     private var colophon: some View {

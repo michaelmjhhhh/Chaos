@@ -66,6 +66,8 @@ struct PipelineCard: View {
             RoundedRectangle(cornerRadius: Theme.r6)
                 .fill(Theme.paperTint)
         )
+        // Decorative preview; the filed name is already announced by the combined card.
+        .accessibilityHidden(true)
     }
 
     private var content: some View {

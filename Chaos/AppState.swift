@@ -341,6 +341,7 @@ final class AppState {
 
             currentStage = .success(result.destinationURL.lastPathComponent)
             currentFile = result.destinationURL.lastPathComponent
+            announce("Filed as \(result.destinationURL.lastPathComponent)")
 
             if resolvedNotifyOnComplete {
                 NotificationService.notifySuccess(
@@ -353,6 +354,7 @@ final class AppState {
             let friendly = FriendlyError(error, provider: resolvedProvider)
             lastError = friendly
             currentStage = .error(friendly.message)
+            announce("Couldn't file \(originalName)")
 
             successWindow.append(0.0)
             if successWindow.count > 100 { successWindow.removeFirst() }
@@ -455,5 +457,18 @@ final class AppState {
 
     private func setCurrentStage(_ stage: ProcessingStage) {
         currentStage = stage
+    }
+
+    /// Speak a brief status update to VoiceOver users. Low priority so a busy batch
+    /// doesn't interrupt whatever they're reading.
+    private func announce(_ message: String) {
+        NSAccessibility.post(
+            element: NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [
+                .announcement: message,
+                .priority: NSAccessibilityPriorityLevel.low.rawValue
+            ]
+        )
     }
 }
