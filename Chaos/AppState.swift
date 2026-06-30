@@ -39,6 +39,7 @@ final class AppState {
     @ObservationIgnored private let configService = ConfigService()
     @ObservationIgnored private let historyStore = HistoryStore()
     @ObservationIgnored private var apiHealthCheckID = UUID()
+    @ObservationIgnored private var batchTask: Task<Void, Never>?
 
     var isWatching: Bool {
         if case .running = watcherStatus { return true }
@@ -317,14 +318,20 @@ final class AppState {
 
     /// Run a set of images through the pipeline one at a time, publishing N-of-M
     /// progress for the UI. Shared by drag-drop, the Organize picker, and Retry all.
+    /// Ignores re-entry while a batch is already running so two interleaved runs can't
+    /// scramble `batchProgress`; the `defer` guarantees the indicator always resets.
     private func processBatch(_ urls: [URL]) {
-        Task {
+        guard batchTask == nil else { return }
+        batchTask = Task {
+            defer {
+                batchProgress = nil
+                batchTask = nil
+            }
             let total = urls.count
             for (i, url) in urls.enumerated() {
                 batchProgress = (index: i + 1, total: total)
                 await processInput(url: url)
             }
-            batchProgress = nil
         }
     }
 
