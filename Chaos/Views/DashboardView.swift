@@ -285,30 +285,12 @@ struct DashboardView: View {
     private var foldersBlock: some View {
         VStack(alignment: .leading, spacing: Theme.sMed) {
             Text("FOLDERS").smallCaps().foregroundStyle(Theme.textMuted)
-            directoryRow(icon: AnyView(EditorialIcon.Eye(size: 16)),
-                         label: "WATCH",
-                         path: appState.resolvedWatchDir)
-            directoryRow(icon: AnyView(EditorialIcon.TrayArrow(size: 16)),
-                         label: "OUTPUT",
-                         path: appState.resolvedOutputDir)
+            FolderRoute(
+                watchPath: appState.resolvedWatchDir,
+                outputPath: appState.resolvedOutputDir,
+                isWatching: appState.isWatching
+            )
         }
-    }
-
-    private func directoryRow(icon: AnyView, label: String, path: String) -> some View {
-        HStack(alignment: .center, spacing: Theme.sSmall) {
-            icon
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label).smallCaps().foregroundStyle(Theme.textSoft)
-                Text(abbrev(path))
-                    .font(Theme.codeSm)
-                    .foregroundStyle(Theme.textMuted)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label) folder: \(abbrev(path))")
     }
 
     private var colophon: some View {
@@ -345,9 +327,5 @@ struct DashboardView: View {
         if s <= 0 { return "—" }
         if s < 1 { return String(format: "%.0fms", s * 1000) }
         return String(format: "%.1fs", s)
-    }
-
-    private func abbrev(_ p: String) -> String {
-        p.replacingOccurrences(of: NSHomeDirectory(), with: "~")
     }
 }
