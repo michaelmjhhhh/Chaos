@@ -5,7 +5,7 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .dashboard
     @State private var showOnboarding = false
 
-    enum AppTab: Hashable { case dashboard, pipeline }
+    enum AppTab: Hashable { case dashboard, pipeline, insights }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -14,6 +14,9 @@ struct ContentView: View {
             }
             Tab("Pipeline", systemImage: "square.stack.3d.up", value: AppTab.pipeline) {
                 PipelineView()
+            }
+            Tab("Insights", systemImage: "chart.bar.xaxis", value: AppTab.insights) {
+                InsightsView()
             }
         }
         .frame(minWidth: 520, minHeight: 540)
