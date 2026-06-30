@@ -8,6 +8,7 @@ import SwiftUI
 /// step so the product still works end-to-end.
 struct WelcomeView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onFinish: () -> Void
 
     @State private var stepIndex = 0
@@ -165,7 +166,7 @@ struct WelcomeView: View {
                 Spacer()
 
                 if stepIndex > 0 {
-                    Button("Back") { withAnimation { stepIndex -= 1 } }
+                    Button("Back") { step(by: -1) }
                         .buttonStyle(.plain)
                         .font(Theme.button)
                         .foregroundStyle(Theme.textBody)
@@ -178,12 +179,21 @@ struct WelcomeView: View {
         }
     }
 
+    /// Move between onboarding steps, animating only when the user allows motion.
+    private func step(by delta: Int) {
+        if reduceMotion {
+            stepIndex += delta
+        } else {
+            withAnimation { stepIndex += delta }
+        }
+    }
+
     private var primaryButton: some View {
         Button {
             if step == .ready {
                 finish(start: true)
             } else {
-                withAnimation { stepIndex += 1 }
+                step(by: 1)
             }
         } label: {
             Text(step == .ready ? "Start Watching" : "Continue")
