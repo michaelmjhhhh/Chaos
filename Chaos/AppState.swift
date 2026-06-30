@@ -97,6 +97,19 @@ final class AppState {
         SlugLanguage.from(config.language)
     }
 
+    /// The user's custom system prompt when the feature is enabled and the text is non-blank;
+    /// otherwise nil, meaning the built-in default prompt is used. This nil is the single signal
+    /// the pipeline keys off of.
+    var resolvedCustomPrompt: String? {
+        guard config.useCustomPrompt == true,
+              let prompt = config.customPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty
+        else {
+            return nil
+        }
+        return prompt
+    }
+
     var resolvedCopyToClipboard: Bool {
         config.copyToClipboard ?? false
     }
@@ -353,7 +366,8 @@ final class AppState {
                 model: resolvedModel,
                 language: resolvedLanguage,
                 copyToClipboard: resolvedCopyToClipboard,
-                namingPolicy: resolvedNamingPolicy
+                namingPolicy: resolvedNamingPolicy,
+                customSystemPrompt: resolvedCustomPrompt
             ) { [weak self] stage in
                 await self?.setCurrentStage(stage)
             }

@@ -22,6 +22,7 @@ actor FileProcessor {
         language: SlugLanguage,
         copyToClipboard: Bool,
         namingPolicy: NamingPolicy = NamingPolicy(),
+        customSystemPrompt: String? = nil,
         onStageChange: @Sendable (ProcessingStage) async -> Void = { _ in }
     ) async throws -> ProcessResult {
         let start = Date()
@@ -37,7 +38,8 @@ actor FileProcessor {
             baseURL: baseURL,
             apiKey: apiKey,
             model: model,
-            language: language
+            language: language,
+            customSystemPrompt: customSystemPrompt
         )
         let slug = SlugSanitizer.sanitize(rawSlug)
         let processingDate = Date()

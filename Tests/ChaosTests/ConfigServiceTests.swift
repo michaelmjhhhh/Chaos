@@ -34,6 +34,32 @@ final class ConfigServiceTests: XCTestCase {
         XCTAssertEqual(loaded, chaosConfig)
         XCTAssertEqual(try paths.read(from: paths.legacyURL), legacyConfig)
     }
+
+    func testRoundTripsCustomPromptFields() throws {
+        let paths = try TemporaryConfigPaths()
+        defer { paths.remove() }
+        let config = AppConfig(
+            provider: "openai",
+            useCustomPrompt: true,
+            customPrompt: "Name files by the visible window title."
+        )
+        try paths.write(config, to: paths.chaosURL)
+
+        let loaded = ConfigService(
+            configPath: paths.chaosURL,
+            legacyConfigPath: paths.legacyURL
+        ).load()
+
+        XCTAssertEqual(loaded.useCustomPrompt, true)
+        XCTAssertEqual(loaded.customPrompt, "Name files by the visible window title.")
+    }
+
+    func testCustomPromptEncodesWithSnakeCaseKeys() throws {
+        let config = AppConfig(useCustomPrompt: true, customPrompt: "x")
+        let json = try String(decoding: JSONEncoder().encode(config), as: UTF8.self)
+        XCTAssertTrue(json.contains("use_custom_prompt"))
+        XCTAssertTrue(json.contains("custom_prompt"))
+    }
 }
 
 private struct TemporaryConfigPaths {

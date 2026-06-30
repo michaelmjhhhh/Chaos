@@ -297,6 +297,8 @@ struct SettingsView: View {
             subtitle: "Shape the filenames Chaos creates and how it groups them."
         ) {
             VStack(alignment: .leading, spacing: Theme.sMed) {
+                let customActive = appState.resolvedCustomPrompt != nil
+
                 VStack(alignment: .leading, spacing: Theme.sMicro) {
                     Picker("Name language", selection: languageBinding) {
                         ForEach(SlugLanguage.allCases) { language in
@@ -304,7 +306,13 @@ struct SettingsView: View {
                         }
                     }
                     .help("The language of the generated names — not the app's own language.")
-                    SettingsHint("Sets the language of the generated names (the app stays in English).")
+                    .disabled(customActive)
+                    .opacity(customActive ? 0.5 : 1)
+                    SettingsHint(
+                        customActive
+                            ? "Overridden while a custom prompt is on — language is whatever your prompt specifies."
+                            : "Sets the language of the generated names (the app stays in English)."
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: Theme.sMicro) {
@@ -323,6 +331,8 @@ struct SettingsView: View {
 
                     SettingsHint("Pieces you can use:  {slug} = AI name · {date} = 2026-06-27 · {time} = 143200")
                 }
+
+                customPromptSection
 
                 Picker("Group into subfolders", selection: subfolderRuleBinding) {
                     ForEach(SubfolderRule.allCases) { rule in
@@ -363,6 +373,43 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.surfaceMuted)
             .clipShape(.rect(cornerRadius: Theme.r6))
+        }
+    }
+
+    /// Lets a user replace the built-in naming instruction with their own. The editor only
+    /// appears once enabled, and is pre-filled (via the toggle binding) with the current
+    /// language's default prompt so there's a starting point to edit from.
+    private var customPromptSection: some View {
+        VStack(alignment: .leading, spacing: Theme.sMicro) {
+            Toggle("Use a custom naming prompt", isOn: useCustomPromptBinding)
+                .help("Replace the built-in instruction with your own, telling the AI exactly how to name screenshots.")
+
+            if appState.config.useCustomPrompt == true {
+                TextEditor(text: customPromptBinding)
+                    .font(Theme.body)
+                    .frame(minHeight: 120)
+                    .padding(Theme.sSmall)
+                    .scrollContentBackground(.hidden)
+                    .background(Theme.surfaceMuted)
+                    .clipShape(.rect(cornerRadius: Theme.r6))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.r6)
+                            .stroke(Theme.border, lineWidth: 1)
+                    )
+
+                HStack(alignment: .firstTextBaseline) {
+                    SettingsHint("Your prompt fully replaces the default. Keep names short and slug-like — output is capped and cleaned automatically.")
+                    Spacer()
+                    Button("Reset to default") {
+                        appState.config.customPrompt = VisionAPIClient.defaultSystemPrompt(
+                            language: appState.resolvedLanguage
+                        )
+                    }
+                    .buttonStyle(.link)
+                    .font(Theme.caption)
+                    .fixedSize()
+                }
+            }
         }
     }
 
@@ -556,6 +603,31 @@ struct SettingsView: View {
         Binding(
             get: { appState.resolvedAppearance },
             set: { appState.setAppearance($0) }
+        )
+    }
+
+    private var useCustomPromptBinding: Binding<Bool> {
+        Binding(
+            get: { appState.config.useCustomPrompt ?? false },
+            set: { enabled in
+                appState.config.useCustomPrompt = enabled
+                // Prefill the editor from the current language's default the first time it's
+                // turned on, so users have a working example to edit rather than a blank box.
+                if enabled,
+                   (appState.config.customPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+                {
+                    appState.config.customPrompt = VisionAPIClient.defaultSystemPrompt(
+                        language: appState.resolvedLanguage
+                    )
+                }
+            }
+        )
+    }
+
+    private var customPromptBinding: Binding<String> {
+        Binding(
+            get: { appState.config.customPrompt ?? "" },
+            set: { appState.config.customPrompt = $0.isEmpty ? nil : $0 }
         )
     }
 }

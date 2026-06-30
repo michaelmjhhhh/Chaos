@@ -42,25 +42,17 @@ actor VisionAPIClient {
         baseURL: String,
         apiKey: String,
         model: String,
-        language: SlugLanguage
+        language: SlugLanguage,
+        customSystemPrompt: String? = nil
     ) async throws -> String {
-        let (systemPrompt, userPrompt) = slugPrompts(language: language)
-
         let payload: [String: Any] = [
             "model": model,
-            "messages": [
-                ["role": "system", "content": systemPrompt],
-                [
-                    "role": "user",
-                    "content": [
-                        ["type": "text", "text": userPrompt],
-                        [
-                            "type": "image_url",
-                            "image_url": ["url": "data:\(mimeType);base64,\(imageBase64)"]
-                        ]
-                    ] as [[String: Any]]
-                ] as [String: Any]
-            ] as [[String: Any]],
+            "messages": Self.chatMessages(
+                imageBase64: imageBase64,
+                mimeType: mimeType,
+                language: language,
+                customSystemPrompt: customSystemPrompt
+            ),
             // A slug is a handful of words; capping output keeps inference fast.
             "max_tokens": 32,
             "stream": false
@@ -114,18 +106,66 @@ actor VisionAPIClient {
         return !data.isEmpty
     }
 
-    private func slugPrompts(language: SlugLanguage) -> (system: String, user: String) {
+    /// The OpenAI-compatible `messages` array for a slug request: a system turn (the custom
+    /// prompt when active, else the language default) and a user turn pairing a short
+    /// "return only the slug" nudge with the image. Exposed so the wiring can be tested.
+    static func chatMessages(
+        imageBase64: String,
+        mimeType: String,
+        language: SlugLanguage,
+        customSystemPrompt: String?
+    ) -> [[String: Any]] {
+        [
+            ["role": "system", "content": resolveSystemPrompt(language: language, customSystemPrompt: customSystemPrompt)],
+            [
+                "role": "user",
+                "content": [
+                    ["type": "text", "text": userPrompt(language: language, customSystemPrompt: customSystemPrompt)],
+                    [
+                        "type": "image_url",
+                        "image_url": ["url": "data:\(mimeType);base64,\(imageBase64)"]
+                    ]
+                ] as [[String: Any]]
+            ] as [String: Any]
+        ]
+    }
+
+    /// The system prompt to send for a request: the user's custom prompt when one is set and
+    /// non-blank, otherwise the built-in default for the chosen language. A custom prompt fully
+    /// replaces the default (including its language instruction); `SlugSanitizer` remains the
+    /// safety net for whatever the model returns.
+    static func resolveSystemPrompt(language: SlugLanguage, customSystemPrompt: String?) -> String {
+        isCustomActive(customSystemPrompt) ? customSystemPrompt! : defaultSystemPrompt(language: language)
+    }
+
+    /// The built-in system prompt for a language. Exposed so the settings editor can prefill and
+    /// reset the custom-prompt field from the same source of truth used at request time.
+    static func defaultSystemPrompt(language: SlugLanguage) -> String {
         switch language {
         case .zh:
-            (
-                "You are a file-naming assistant. Analyze the image and provide a concise, slug-style filename in Simplified Chinese (Chinese characters, numbers, hyphens only). No explanation, no prefix.",
-                "Return only the filename slug in Simplified Chinese."
-            )
+            "You are a file-naming assistant. Analyze the image and provide a concise, slug-style filename in Simplified Chinese (Chinese characters, numbers, hyphens only). No explanation, no prefix."
         case .en:
-            (
-                "You are a file-naming assistant. Analyze the image and provide a concise, slug-style English filename (lowercase, numbers, hyphens only). No explanation, no prefix.",
-                "Return only the filename slug."
-            )
+            "You are a file-naming assistant. Analyze the image and provide a concise, slug-style English filename (lowercase, numbers, hyphens only). No explanation, no prefix."
+        }
+    }
+
+    /// True when a non-blank custom system prompt has been supplied.
+    private static func isCustomActive(_ customSystemPrompt: String?) -> Bool {
+        guard let custom = customSystemPrompt else { return false }
+        return !custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// The user-turn nudge that accompanies the image. A custom prompt overrides the language, so
+    /// it gets the language-neutral nudge; otherwise the default reinforces the chosen language.
+    private static func userPrompt(language: SlugLanguage, customSystemPrompt: String?) -> String {
+        isCustomActive(customSystemPrompt) ? "Return only the filename slug." : defaultUserPrompt(language: language)
+    }
+
+    /// The default user-turn nudge for a language, used when no custom prompt is active.
+    private static func defaultUserPrompt(language: SlugLanguage) -> String {
+        switch language {
+        case .zh: "Return only the filename slug in Simplified Chinese."
+        case .en: "Return only the filename slug."
         }
     }
 

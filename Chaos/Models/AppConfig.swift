@@ -13,6 +13,8 @@ struct AppConfig: Codable, Equatable {
     var subfolderRule: String?
     var notifyOnComplete: Bool?
     var appearance: String?
+    var useCustomPrompt: Bool?
+    var customPrompt: String?
 
     enum CodingKeys: String, CodingKey {
         case provider
@@ -27,5 +29,7 @@ struct AppConfig: Codable, Equatable {
         case subfolderRule = "subfolder_rule"
         case notifyOnComplete = "notify_on_complete"
         case appearance
+        case useCustomPrompt = "use_custom_prompt"
+        case customPrompt = "custom_prompt"
     }
 }
