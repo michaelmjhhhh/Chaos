@@ -103,9 +103,26 @@ struct InsightsView: View {
             HStack(alignment: .top) {
                 bigNumber(snapshot.totalProcessed.formatted())
                 Spacer(minLength: Theme.sSmall)
-                monthOverMonthBadge
+                if snapshot.thisMonth > 0 {
+                    monthOverMonthBadge
+                }
             }
             Text("Images processed").cardLabel()
+            cardDivider
+            VStack(alignment: .leading, spacing: 5) {
+                subStat(snapshot.thisMonth.formatted(), "this month")
+                subStat(thisWeek.formatted(), "this week")
+            }
+        }
+    }
+
+    /// Images processed over the trailing 7 local days (today and the six before it).
+    private var thisWeek: Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        guard let weekAgo = calendar.date(byAdding: .day, value: -6, to: today) else { return 0 }
+        return snapshot.daily.reduce(0) { sum, entry in
+            (entry.key >= weekAgo && entry.key <= today) ? sum + entry.value : sum
         }
     }
 
@@ -146,9 +163,7 @@ struct InsightsView: View {
                     .cardLabel()
             }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                Heatmap(daily: snapshot.daily)
-            }
+            Heatmap(daily: snapshot.daily)
 
             if let peak = snapshot.peakHour {
                 Text("Most active around \(Format.hour(peak))")

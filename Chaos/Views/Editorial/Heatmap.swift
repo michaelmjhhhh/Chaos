@@ -3,18 +3,28 @@ import SwiftUI
 /// The Insights page's signature element: an almanac-style activity calendar. Each square is a
 /// day, columns are weeks (oldest on the left, this week on the right), rows are weekdays.
 /// Intensity is a stepped coral ramp keyed to each day's volume against the busiest day in view.
+///
+/// The number of weeks shown is responsive: the grid fills the available width with as many
+/// weeks as fit (capped at roughly a year, like GitHub's contribution graph), so it never leaves
+/// the card half-empty and reflows when the window resizes.
 struct Heatmap: View {
     /// Local start-of-day → images processed that day.
     let daily: [Date: Int]
-    var weeks: Int = 26
+    var maxWeeks: Int = 53
+    var minWeeks: Int = 26
     var cell: CGFloat = 13
     var spacing: CGFloat = 3
 
     private let calendar = Calendar.current
+    private let labelColumnWidth: CGFloat = 24
+    private let monthLabelHeight: CGFloat = 11
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.sSmall) {
-            grid
+            GeometryReader { geo in
+                grid(weeks: resolvedWeeks(in: geo.size.width))
+            }
+            .frame(height: gridHeight)
             legend
         }
         .accessibilityElement(children: .ignore)
@@ -22,18 +32,33 @@ struct Heatmap: View {
         .accessibilityValue(accessibilitySummary)
     }
 
+    // MARK: - Layout math
+
+    /// How many week-columns fit the available width, clamped to [minWeeks, maxWeeks].
+    private func resolvedWeeks(in width: CGFloat) -> Int {
+        let available = width - labelColumnWidth - spacing
+        guard available > 0 else { return minWeeks }
+        let fit = Int((available + spacing) / (cell + spacing))
+        return max(minWeeks, min(maxWeeks, fit))
+    }
+
+    private var gridHeight: CGFloat {
+        // Month-label row + gap + seven day cells with six gaps between them.
+        monthLabelHeight + spacing + (7 * cell + 6 * spacing)
+    }
+
     // MARK: - Grid
 
-    private var grid: some View {
+    private func grid(weeks: Int) -> some View {
         HStack(alignment: .top, spacing: spacing) {
             weekdayLabels
             VStack(alignment: .leading, spacing: spacing) {
-                monthLabels
+                monthLabels(weeks: weeks)
                 HStack(spacing: spacing) {
                     ForEach(0 ..< weeks, id: \.self) { column in
                         VStack(spacing: spacing) {
                             ForEach(0 ..< 7, id: \.self) { row in
-                                square(for: date(column: column, row: row))
+                                square(for: date(column: column, row: row, weeks: weeks))
                             }
                         }
                     }
@@ -45,24 +70,30 @@ struct Heatmap: View {
     private var weekdayLabels: some View {
         VStack(alignment: .trailing, spacing: spacing) {
             // Spacer matching the month-label row so weekdays line up with their squares.
-            Text(" ").font(Theme.captionSm).frame(height: 11)
+            Text(" ").font(Theme.captionSm).frame(height: monthLabelHeight)
             ForEach(0 ..< 7, id: \.self) { row in
                 Text(weekdayLabel(row))
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Theme.textSoft)
-                    .frame(width: 24, height: cell, alignment: .trailing)
+                    .frame(width: labelColumnWidth, height: cell, alignment: .trailing)
             }
         }
     }
 
-    private var monthLabels: some View {
+    /// One slot per column to stay aligned with the grid; the label for a month's first column is
+    /// drawn as a leading overlay so it can extend rightward over the following empty slots
+    /// instead of being crammed into a single 13px cell.
+    private func monthLabels(weeks: Int) -> some View {
         HStack(spacing: spacing) {
             ForEach(0 ..< weeks, id: \.self) { column in
-                Text(monthLabel(column))
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(Theme.textSoft)
-                    .frame(width: cell, height: 11, alignment: .leading)
-                    .fixedSize()
+                Color.clear
+                    .frame(width: cell, height: monthLabelHeight)
+                    .overlay(alignment: .leading) {
+                        Text(monthLabel(column, weeks: weeks))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(Theme.textSoft)
+                            .fixedSize()
+                    }
             }
         }
     }
@@ -118,15 +149,15 @@ struct Heatmap: View {
     }
 
     /// Start-of-week containing the first (leftmost) column, aligned to the calendar's first
-    /// weekday so rows are consistent.
-    private var firstColumnStart: Date {
+    /// weekday so rows are consistent. The rightmost column is always the current week.
+    private func firstColumnStart(weeks: Int) -> Date {
         let offset = (calendar.component(.weekday, from: today) - calendar.firstWeekday + 7) % 7
         let startOfThisWeek = calendar.date(byAdding: .day, value: -offset, to: today) ?? today
         return calendar.date(byAdding: .day, value: -7 * (weeks - 1), to: startOfThisWeek) ?? startOfThisWeek
     }
 
-    private func date(column: Int, row: Int) -> Date? {
-        calendar.date(byAdding: .day, value: column * 7 + row, to: firstColumnStart)
+    private func date(column: Int, row: Int, weeks: Int) -> Date? {
+        calendar.date(byAdding: .day, value: column * 7 + row, to: firstColumnStart(weeks: weeks))
     }
 
     private func weekdayLabel(_ row: Int) -> String {
@@ -140,10 +171,12 @@ struct Heatmap: View {
     }
 
     /// Month abbreviation shown only on the first column of each month.
-    private func monthLabel(_ column: Int) -> String {
-        guard let columnStart = date(column: column, row: 0) else { return "" }
+    private func monthLabel(_ column: Int, weeks: Int) -> String {
+        guard let columnStart = date(column: column, row: 0, weeks: weeks) else { return "" }
         let month = calendar.component(.month, from: columnStart)
-        let previous = column > 0 ? date(column: column - 1, row: 0).map { calendar.component(.month, from: $0) } : nil
+        let previous = column > 0
+            ? date(column: column - 1, row: 0, weeks: weeks).map { calendar.component(.month, from: $0) }
+            : nil
         guard month != previous else { return "" }
         return calendar.shortMonthSymbols[month - 1]
     }
@@ -166,5 +199,6 @@ struct Heatmap: View {
     }
     return Heatmap(daily: daily)
         .padding(40)
+        .frame(width: 900)
         .background(Theme.canvas)
 }
