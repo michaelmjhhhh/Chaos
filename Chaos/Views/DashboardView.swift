@@ -29,7 +29,7 @@ struct DashboardView: View {
                 colophon
             }
         }
-        .frame(minWidth: 760, minHeight: 540)
+        .frame(minWidth: 520, minHeight: 540)
         .onAppear {
             Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { _ in
                 ellipsisCount = (ellipsisCount + 1) % 4
@@ -178,13 +178,23 @@ struct DashboardView: View {
         }
     }
 
+    /// Two columns when there's room; falls back to a single stacked column on narrow
+    /// widths (e.g. a tiled window on a 13" MacBook). Giving the wide hero a real
+    /// minWidth lets ViewThatFits pick the wide layout only when it actually fits.
     private var bodyColumns: some View {
-        HStack(alignment: .top, spacing: 28) {
-            heroColumn
-                .frame(maxWidth: .infinity)
-                .layoutPriority(2)
-            editorialColumn
-                .frame(width: 280)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 28) {
+                heroColumn
+                    .frame(minWidth: 360, maxWidth: .infinity)
+                    .layoutPriority(2)
+                editorialColumn
+                    .frame(width: 280)
+            }
+
+            VStack(alignment: .leading, spacing: Theme.sLg) {
+                heroColumn
+                editorialColumn
+            }
         }
     }
 
