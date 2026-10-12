@@ -11,14 +11,17 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -333,6 +336,38 @@ func TestClientPayloadParsingAndHostedHealth(t *testing.T) {
 		}
 	}
 }
+func TestFriendlyDistinguishesFilesystemAndNetworkErrors(t *testing.T) {
+	secretURL := "https://account:private-password@provider.invalid/v1?api_key=private-key"
+	for _, tc := range []struct {
+		name, provider, action, detail string
+		err                            error
+	}{
+		{"file permission", "chaos-hosted", "retry", "permission denied", &os.PathError{Op: "open", Path: "/images/source.png", Err: os.ErrPermission}},
+		{"missing file with Ollama", "ollama", "retry", "file does not exist", &os.PathError{Op: "stat", Path: "/images/missing.png", Err: os.ErrNotExist}},
+		{"file publication", "chaos-hosted", "retry", "permission denied", &os.LinkError{Op: "link", Old: "/images/source.png", New: "/images/out.png", Err: syscall.EACCES}},
+		{"network connection", "chaos-hosted", "internet", "internet", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}},
+		{"local model connection", "ollama", "settings", "Ollama", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}},
+		{"network timeout", "chaos-hosted", "retry", "too long", &net.DNSError{Err: "timeout", IsTimeout: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Request wrappers must not leak credentials, including when they
+			// wrap a local filesystem error (for example reading a certificate).
+			err := &url.Error{Op: "Post", URL: secretURL, Err: tc.err}
+			friendly := Friendly(err, tc.provider)
+			if friendly.Action != tc.action || !strings.Contains(friendly.Message, tc.detail) {
+				t.Fatalf("wrong recovery: %+v", friendly)
+			}
+			if strings.Contains(friendly.Message, "private-") || strings.Contains(friendly.Message, "provider.invalid") {
+				t.Fatal("request credentials leaked into error message")
+			}
+			var pathError *os.PathError
+			if errors.As(tc.err, &pathError) && (!strings.Contains(friendly.Message, pathError.Path) || !strings.Contains(friendly.Message, pathError.Op)) {
+				t.Fatal("filesystem operation/path detail was lost")
+			}
+		})
+	}
+}
+
 func TestProviderErrorsAndCancellation(t *testing.T) {
 	for _, status := range []int{401, 402, 404, 429, 503} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {

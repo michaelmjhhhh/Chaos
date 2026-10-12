@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -218,6 +219,18 @@ func Friendly(err error, provider string) FriendlyError {
 	}
 	if errors.Is(err, context.Canceled) {
 		return FriendlyError{"Processing was cancelled.", "retry"}
+	}
+	// PathError implements net.Error too, and LinkError can wrap an errno that
+	// does. Keep local file failures out of the internet/Ollama recovery path.
+	// Report the filesystem error itself, not an outer request wrapper that may
+	// contain a provider URL or credentials.
+	var pathError *os.PathError
+	if errors.As(err, &pathError) {
+		return FriendlyError{pathError.Error(), "retry"}
+	}
+	var linkError *os.LinkError
+	if errors.As(err, &linkError) {
+		return FriendlyError{linkError.Error(), "retry"}
 	}
 	var network net.Error
 	if errors.As(err, &network) {

@@ -24,6 +24,19 @@ import (
 	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
 
+type testHTTPClient struct {
+	client *http.Client
+	t      *testing.T
+}
+
+func (c testHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	response, err := c.client.Do(request)
+	if err != nil {
+		c.t.Logf("local test provider transport: %v", err)
+	}
+	return response, err
+}
+
 func testController(t *testing.T, handler http.HandlerFunc, effects Effects) (*Controller, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -37,7 +50,7 @@ func testController(t *testing.T, handler http.HandlerFunc, effects Effects) (*C
 	if err := core.SaveConfig(filepath.Join(dir, "config.json"), cfg); err != nil {
 		t.Fatal(err)
 	}
-	c, err := New(Options{DataDir: dir, Home: dir, Client: &core.Client{HTTP: server.Client()}, Effects: effects, WatchInterval: 10 * time.Millisecond, DeviceHash: strings.Repeat("a", 64)})
+	c, err := New(Options{DataDir: dir, Home: dir, Client: &core.Client{HTTP: testHTTPClient{client: server.Client(), t: t}}, Effects: effects, WatchInterval: 10 * time.Millisecond, DeviceHash: strings.Repeat("a", 64)})
 	if err != nil {
 		t.Fatal(err)
 	}
