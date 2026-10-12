@@ -90,7 +90,7 @@ The migrated hosted package must preserve these externally consumed contracts:
 - Redis keys remain `dev:<hash>` and `budget:YYYY-MM` (UTC); monthly expiration is 35 days.
 - Existing environment names remain `APP_TOKEN`, `ADMIN_TOKEN`, `AGNES_API_KEY`, `AGNES_BASE_URL`, `MODEL`, `FREE_LIMIT`, `GLOBAL_MONTHLY_LIMIT`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`.
 
-The original proxy checked quotas before an upstream request and incremented afterwards, so concurrent calls could exceed either limit. The replacement must reserve quotas atomically, handle failures consistently, bound requests/responses and upstream time, and allowlist cost-bearing payload fields. The public client token and client-provided device ID remain a weak gate; the global cap is essential. Hosted implementation/tests are separate from `internal/core`.
+The original proxy checked quotas before an upstream request and incremented afterwards, so concurrent calls could exceed either limit. The replacement reserves quotas atomically, handles failures conservatively, and bounds requests/responses and upstream time. It preserves additional payload fields while overriding the model, streaming flag, completion count and output-token ceiling; it does not apply a strict field allowlist. The public client token and client-provided device ID remain a weak gate. The global request cap and an upstream provider spending limit are essential. Hosted implementation/tests are separate from `internal/core`.
 
 ## Evidence and validation
 

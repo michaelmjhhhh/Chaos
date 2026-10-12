@@ -32,8 +32,8 @@ disabled. Optional defaults:
 | `GLOBAL_MONTHLY_LIMIT` | `100000` |
 | `PORT` | `3000` |
 
-Malformed or negative quota limits prevent startup; zero disables the respective
-quota. Credentials are trimmed. Device IDs must be 16–256 ASCII letters,
+Malformed or negative quota limits prevent startup; setting either limit to zero
+blocks all completion requests. Credentials are trimmed. Device IDs must be 16–256 ASCII letters,
 digits, underscores or hyphens, which includes the app's existing SHA-256 IDs.
 The app token is public in distributed clients, so device identity is not a
 cryptographic authentication factor. The global budget remains the hard cost

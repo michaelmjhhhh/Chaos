@@ -8,7 +8,7 @@ Go 1.27.2; its framework review and native examples are linked in
 
 ## Automated regression coverage
 
-Final local gates passed on 2026-10-13: **74 top-level Go tests** (plus nested
+Final local gates passed on 2026-10-13: **79 top-level Go tests** (plus nested
 cases) under the race detector, including real Redis; `go vet`; MyGo native
 `vet`; cgo-disabled native builds and Linux/Windows/macOS Intel cross-builds;
 signed app packaging; and `hdiutil verify` for the 13 MB DMG. The packaged
@@ -25,16 +25,18 @@ The Go suites exercise application behavior, not only compilation:
   JPEG EXIF orientation, WebP, macOS HEIC; bounded decoding, alpha compositing and
   vision resize; Unicode/unsafe model output; filename templates and collisions;
   rename/undo; Finder attributes, creation date and ACLs; source replacement during
-  preparation/API work; exclusive publication and source preservation on failure.
+  preparation/API work; exclusive publication and source preservation on failure;
+  filesystem errors retain their details instead of being reported as network outages.
 - **Controller:** complete filing → rename → relaunch → undo; duplicate intake;
   cancellation; rapid Stop/Start; undo under a running watcher with aliased folder
-  paths; stale health/usage responses; appearance versus credential changes;
+  paths and subsequent filesystem identity reuse; stale health/usage responses;
+  appearance versus credential changes;
   immutable snapshots; corrupt config preservation; crash journal recovery and
   conflicting source/same-location safety; clipboard failure remains durable success.
 - **Native views:** all main tabs in light/dark appearance; search and filters;
   keyboard focus and shortcuts; selection/open; rename/revert context actions;
   provider, prompt, template and appearance settings; onboarding; FAQ; error
-  recovery; tray actions/layout; constrained widths and reduced-motion preferences.
+  recovery; tray actions/layout and constrained widths.
 - **Hosted API:** authentication, method/body validation, model pinning, bounded
   upstream responses, error translation, administrative reset and origin headers.
   Actual local Redis executes the production Lua for concurrent device/global
