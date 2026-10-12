@@ -26,24 +26,82 @@ type operation struct {
 	SHA256      string          `json:"sha256"`
 }
 
-func digestFile(path string) (string, error) {
-	f, err := os.Open(path)
+type recoveryFile struct {
+	digest string
+	info   os.FileInfo
+}
+
+func sameRecoveryFile(a, b os.FileInfo) bool {
+	return a != nil && b != nil && a.Mode().IsRegular() && b.Mode().IsRegular() &&
+		os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime())
+}
+
+func (f recoveryFile) verifyEntry(path string) error {
+	current, err := os.Lstat(path)
 	if err != nil {
-		return "", err
+		return err
 	}
-	defer f.Close()
-	info, err := f.Stat()
+	if !sameRecoveryFile(f.info, current) {
+		return errors.New("image changed during recovery verification")
+	}
+	return nil
+}
+
+func (f recoveryFile) verifyCurrent(path string) error {
+	current, err := readRecoveryFile(path)
 	if err != nil {
-		return "", err
+		return err
+	}
+	if !sameRecoveryFile(f.info, current.info) || f.digest != current.digest {
+		return errors.New("image identity or content changed during recovery verification")
+	}
+	return nil
+}
+
+func readRecoveryFile(path string) (recoveryFile, error) {
+	// Stat on the opened handle follows symlinks. Inspect the directory entry
+	// first so a destination symlink cannot masquerade as a completed copy.
+	info, err := os.Lstat(path)
+	if err != nil {
+		return recoveryFile{}, err
 	}
 	if !info.Mode().IsRegular() {
-		return "", errors.New("expected a regular image file")
+		return recoveryFile{}, errors.New("expected a regular image file, not a link or directory")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return recoveryFile{}, err
+	}
+	defer f.Close()
+	opened, err := f.Stat()
+	if err != nil {
+		return recoveryFile{}, err
+	}
+	if !sameRecoveryFile(info, opened) {
+		return recoveryFile{}, errors.New("image changed while opening for recovery")
 	}
 	h := sha256.New()
-	if _, err = io.Copy(h, f); err != nil {
-		return "", err
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return recoveryFile{}, err
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	after, err := f.Stat()
+	if err != nil {
+		return recoveryFile{}, err
+	}
+	if n != info.Size() || !sameRecoveryFile(info, after) {
+		return recoveryFile{}, errors.New("image changed while reading for recovery")
+	}
+	result := recoveryFile{digest: hex.EncodeToString(h.Sum(nil)), info: info}
+	if err := result.verifyEntry(path); err != nil {
+		return recoveryFile{}, err
+	}
+	return result, nil
+}
+
+func digestFile(path string) (string, error) {
+	f, err := readRecoveryFile(path)
+	return f.digest, err
 }
 
 func (o *operation) fingerprint() error {
@@ -117,24 +175,47 @@ func (c *Controller) recoverOperations() error {
 			failures = append(failures, fmt.Errorf("invalid same-location recovery of %s; file preserved", filepath.Base(o.Source)))
 			continue
 		}
-		destinationDigest, dstErr := digestFile(o.Destination)
-		sourceDigest, srcErr := digestFile(o.Source)
+		destination, dstErr := readRecoveryFile(o.Destination)
+		source, srcErr := readRecoveryFile(o.Source)
 		if errors.Is(dstErr, os.ErrNotExist) && srcErr == nil {
 			// The app stopped before publication: the source is still intact.
-			if sourceDigest == o.SHA256 {
+			if source.digest == o.SHA256 {
 				_ = c.removeOperation(o.Record.ID)
 			} else {
 				failures = append(failures, fmt.Errorf("source changed during interrupted filing: %s", filepath.Base(o.Source)))
 			}
 			continue
 		}
-		if dstErr != nil || destinationDigest != o.SHA256 {
+		if dstErr != nil || destination.digest != o.SHA256 {
 			failures = append(failures, fmt.Errorf("cannot verify interrupted filing of %s; both locations preserved", filepath.Base(o.Source)))
 			continue
 		}
 		if srcErr == nil {
-			if sourceDigest != o.SHA256 {
+			// Different path spellings may resolve through parent-directory
+			// aliases to the same entry. Even a hard link is ambiguous here:
+			// normal moves publish a new inode, so retain both paths for review.
+			if os.SameFile(source.info, destination.info) {
+				failures = append(failures, fmt.Errorf("recovery locations refer to the same file: %s; no files removed", filepath.Base(o.Source)))
+				continue
+			}
+			if source.digest != o.SHA256 {
 				failures = append(failures, fmt.Errorf("source was replaced after filing %s; no files removed", filepath.Base(o.Source)))
+				continue
+			}
+			// Hashing either file can take time. Recheck source bytes and
+			// identity, then the retained destination before removing the source.
+			if err := source.verifyCurrent(o.Source); err != nil {
+				failures = append(failures, fmt.Errorf("cannot verify interrupted source; files preserved: %w", err))
+				continue
+			}
+			if err := destination.verifyCurrent(o.Destination); err != nil {
+				failures = append(failures, fmt.Errorf("cannot verify interrupted destination; files preserved: %w", err))
+				continue
+			}
+			// Rehashing the destination can take time too. Reject a source
+			// replacement observed since its content was verified.
+			if err := source.verifyEntry(o.Source); err != nil {
+				failures = append(failures, fmt.Errorf("source changed before completing recovery; files preserved: %w", err))
 				continue
 			}
 			if err = os.Remove(o.Source); err != nil {
@@ -143,6 +224,10 @@ func (c *Controller) recoverOperations() error {
 			}
 		} else if !errors.Is(srcErr, os.ErrNotExist) {
 			failures = append(failures, srcErr)
+			continue
+		}
+		if err := destination.verifyCurrent(o.Destination); err != nil {
+			failures = append(failures, fmt.Errorf("destination changed before recording recovery: %w", err))
 			continue
 		}
 		o.Record.Path = o.Destination

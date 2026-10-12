@@ -54,7 +54,7 @@ Native preferences requiring separate migration are `autoStart`, `hasCompletedOn
 
 ## Audited defects and implementation responses
 
-| Original concern | Migration response |
+| Audited concern | Migration response |
 | --- | --- |
 | Watcher marked a name seen before its bytes were stable; small initial writes were lost forever. | Baseline is captured synchronously; pending files stabilize before validation and only then become handled. A new file reusing a name is recognized by identity and metadata. |
 | Watcher used a two-second timestamp approximation to ignore existing files. | Explicit initial directory snapshot excludes every existing file, even a freshly created screenshot. |
@@ -69,6 +69,7 @@ Native preferences requiring separate migration are `autoStart`, `hasCompletedOn
 | Plain byte copying loses Finder metadata and changes Date Created. | macOS extended attributes, creation date, file mode and modification time are copied, including Finder tags and image metadata, where the filesystem supports them. Private OS-managed security markers remain OS-managed. |
 | macOS ACLs are not included in the extended-attribute listing, so a byte-copy move discarded security restrictions. | Public Darwin ACL APIs copy the complete ACL through the existing purego bridge without cgo. Empty source ACLs replace inherited destination ACLs. A destination unable to retain a nonempty ACL causes an error before the source is removed. Ordinary hidden/nodump flags are copied; immutable, append-only and OS-managed flags are not applied to unpublished copies, so rollback remains possible. |
 | Filesystem writes preceded detached history persistence. | Move hooks run before exact destination publication, allowing a controller journal; history writes are synchronous and errors are surfaced. Inserts are idempotent by ID for recovery. |
+| Interrupted-move recovery could mistake a destination symlink or directory alias for a completed copy and remove the only image. | Recovery rejects nonregular entries and shared source/destination identities, verifies opened/current identity while hashing, and rechecks identity and content before removal. Ambiguous files and their pending journal remain without recording success. Regression cases include symlinks, parent-directory aliases, hard links and replaced entries, including in-place edits preserving size/mtime; ordinary distinct-copy recovery remains idempotent. |
 | Malformed legacy JSON could be archived as empty history; existing backups were removed. | Strict decode/validation, transactional merge, preserved corrupt source and collision-free backups. |
 | Model output could exceed filesystem filename limits. | Sanitization caps UTF-8 basename bytes, leaving room for extension and collision suffixes. |
 | Missing/invalid images became empty base64; HEIC fallback was mislabeled PNG. | Explicit readable regular-file validation, bounded decoding, required valid image, correct JPEG MIME and native macOS HEIC conversion. |

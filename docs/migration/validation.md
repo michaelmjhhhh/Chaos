@@ -8,7 +8,7 @@ Go 1.27.2; its framework review and native examples are linked in
 
 ## Automated regression coverage
 
-Final local gates passed on 2026-10-13: **79 top-level Go tests** (plus nested
+Final local gates passed on 2026-10-13: **81 top-level Go tests** (plus nested
 cases) under the race detector, including real Redis; `go vet`; MyGo native
 `vet`; cgo-disabled native builds and Linux/Windows/macOS Intel cross-builds;
 signed app packaging; and `hdiutil verify` for the 13 MB DMG. The packaged
@@ -32,7 +32,9 @@ The Go suites exercise application behavior, not only compilation:
   paths and subsequent filesystem identity reuse; stale health/usage responses;
   appearance versus credential changes;
   immutable snapshots; corrupt config preservation; crash journal recovery and
-  conflicting source/same-location safety; clipboard failure remains durable success.
+  conflicting source/same-location safety; recovery rejects symlinks, directory
+  aliases, shared file identities and replaced entries while retaining images and
+  pending journals; clipboard failure remains durable success.
 - **Native views:** all main tabs in light/dark appearance; search and filters;
   keyboard focus and shortcuts; selection/open; rename/revert context actions;
   provider, prompt, template and appearance settings; onboarding; FAQ; error
