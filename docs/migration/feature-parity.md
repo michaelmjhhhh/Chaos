@@ -1,6 +1,6 @@
 # Native Go feature-parity audit
 
-Baseline: the Swift application in `Chaos/`, read alongside its tests before migration.
+Baseline: the [Swift application at `3209622`](https://github.com/michaelmjhhhh/Chaos/tree/3209622034e03d25b3a53b0d4be06d1c245b88d7/Chaos), read alongside its tests before migration.
 The replacement uses MyGo native `ui.View` surfaces. It contains no HTML, JavaScript,
 WebView, or Swift application layer.
 

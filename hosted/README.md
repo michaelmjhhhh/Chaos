@@ -128,5 +128,6 @@ curl "$HOST/api/usage" \
 ```
 
 Check that the first success reports 19 remaining at the default limit, invalid
-credentials get 401, exhausted quotas get 402, and a failed upstream call leaves
-usage unchanged. Use the admin reset endpoint only on intended test devices.
+credentials get 401 and exhausted quotas get 402. A failed upstream call refunds
+the device allowance; an ambiguous post-dispatch failure retains global budget
+as described above. Use the admin reset endpoint only on intended test devices.
