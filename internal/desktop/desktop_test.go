@@ -326,8 +326,9 @@ func TestCustomPromptPreviewAndAppearance(t *testing.T) {
 	}
 	click(t, tt, "No Subfolders")
 	click(t, tt, "By Month")
-	if !tt.HasText("2026-06/2026-06-27-meeting-notes.png") {
-		t.Fatal("subfolder preview incorrect")
+	wantPreview := filepath.Join("2026-06", "2026-06-27-meeting-notes.png")
+	if !tt.HasText(wantPreview) {
+		t.Fatalf("subfolder preview missing native path %q; texts=%q", wantPreview, tt.Texts())
 	}
 	click(t, tt, "Dark")
 	if ctl.saved.Appearance != "dark" {
