@@ -1,71 +1,126 @@
-# Chaos hosted free-trial proxy
+# Chaos hosted trial API (Go)
 
-A single Vercel serverless function that lets Chaos users name **20 screenshots free**
-through Agnes AI, then guides them to bring their own key. The real Agnes key lives only
-here, never in the shipped app.
+The optional hosted service grants each device a limited number of screenshot
+names through an OpenAI-compatible Agnes upstream. It holds the provider key
+server-side. Both endpoints retain their existing URLs and JSON contracts:
 
+- `POST /api/chat/completions`: bearer `<APP_TOKEN>:<deviceHash>`, pinned model,
+  nonstreaming single completion, `X-Chaos-Trial-Remaining` on success; quota
+  exhaustion returns 402.
+- `GET /api/usage`: same bearer; returns `used`, `limit`, `remaining`,
+  `globalSpent`, `globalLimit`.
+- `POST /api/usage`: same bearer plus `X-Admin-Token`; resets that device's
+  counter. `?global=1` or `?global=true` also resets the current UTC month.
+
+The implementation is [internal/hosted](../internal/hosted), with the server in
+[cmd/chaos-hosted](../cmd/chaos-hosted). It uses only Go's standard library and
+the [Upstash Redis REST command protocol](https://upstash.com/docs/redis/features/restapi).
+There is no Node runtime, npm install or frontend build.
+
+## Configuration
+
+Use the variables in [.env.example](.env.example). Required values are
+`APP_TOKEN`, `AGNES_API_KEY`, `UPSTASH_REDIS_REST_URL` and
+`UPSTASH_REDIS_REST_TOKEN`. `ADMIN_TOKEN` is optional; without it resets are
+disabled. Optional defaults:
+
+| Variable | Default |
+| --- | --- |
+| `MODEL` | `agnes-2.0-flash` |
+| `AGNES_BASE_URL` | `https://apihub.agnes-ai.com/v1` |
+| `FREE_LIMIT` | `20` |
+| `GLOBAL_MONTHLY_LIMIT` | `100000` |
+| `PORT` | `3000` |
+
+Malformed or negative quota limits prevent startup; zero disables the respective
+quota. Credentials are trimmed. Device IDs must be 16–256 ASCII letters,
+digits, underscores or hyphens, which includes the app's existing SHA-256 IDs.
+The app token is public in distributed clients, so device identity is not a
+cryptographic authentication factor. The global budget remains the hard cost
+ceiling against clients inventing device IDs.
+
+## Local run and deployment
+
+From the **repository root**, export the environment variables, then run:
+
+```sh
+go run ./cmd/chaos-hosted
 ```
-Chaos app ──POST /api/chat/completions──▶ this function ──▶ Agnes AI (agnes-2.0-flash)
-  Bearer <APP_TOKEN>:<deviceHash>          │ Bearer <AGNES_API_KEY>
-                                           └─ Upstash Redis: dev:<hash> ≤ 20,
-                                              budget:<YYYY-MM> ≤ global cap
+
+For the existing Vercel project, **change Root Directory from `hosted/` to the
+repository root** and use the **Go** framework preset. The root
+[vercel.json](../vercel.json) builds only `cmd/chaos-hosted`; it does not compile
+or run the desktop app. Keep the existing domain and environment variables so
+installed clients continue to reach the same endpoints and Redis counters.
+Remove any inherited npm install/typecheck build overrides in project settings.
+
+The [official Vercel Go runtime guide](https://vercel.com/docs/functions/runtimes/go)
+documents root `go.mod`, the Go preset, custom build commands, `PORT`, and
+toolchain selection from `go.mod`. The runtime is beta. Local Linux compilation
+is covered, but a Vercel preview build and authenticated smoke test are still
+required before promoting a deployment; this migration does not deploy changes.
+
+Existing `dev:<hash>` and `budget:<YYYY-MM>` Redis keys remain compatible.
+Do not run old and new proxy versions against the same production quota store
+for a sustained period: the old version lacks reservations and can overspend
+under concurrent calls. Cut traffic over after checking the preview.
+
+## Quota correctness and limits
+
+A single [Redis EVAL](https://upstash.com/docs/redis/commands/scripting/eval)
+checks both counters and reserves one unit of each before contacting the paid
+provider. Concurrent requests cannot pass separate read-then-increment checks.
+The monthly budget has a 35-day TTL. Failed upstream requests refund only their
+own reservation; successful requests keep their reserved counters.
+
+Reservation IDs make rollback idempotent. Counter generation stamps make an
+old in-flight request's refund safe even after an administrative reset, without
+subtracting from new usage. Redis failures prevent an upstream request from
+starting. If a refund cannot be confirmed, or a process dies after reserving,
+quota is conservatively consumed; inspect/reset that device administratively
+after resolving the incident. Expiring reservation metadata never releases a
+counter automatically, which could otherwise allow a paid call to escape the
+global cap. Usage includes requests currently in flight.
+
+Request and response bodies are limited to 4 MiB. A request must contain 1–16
+message objects. The server pins `model`, `stream=false`, `n=1` and output tokens
+to at most 512 (default 256), stripping `max_completion_tokens` after considering
+its requested ceiling. Redirects are not followed with provider credentials.
+Upstream calls have a 60-second deadline. Failure statuses and bodies pass
+through; oversized or unreadable responses become 502. No provider keys,
+request bodies, images or device identifiers are logged.
+
+## Verification
+
+Run from the repository root:
+
+```sh
+go test -race ./internal/hosted ./cmd/chaos-hosted
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/chaos-hosted ./cmd/chaos-hosted
 ```
 
-The per-device identity is a salted SHA-256 of the Mac's hardware UUID, computed in the
-app — so reinstalling the app does **not** reset the trial. The raw hardware id never
-leaves the device.
+The HTTP tests cover authentication, admin reset, methods, payload/token bounds,
+upstream errors/timeouts, quota denials, failure propagation and concurrent
+requests. For the actual Lua integration tests, put `redis-server` on `PATH` or
+set `REDIS_SERVER_BIN` to its executable. Tests start an isolated temporary Redis
+process behind a local HTTP protocol bridge; they never touch a remote account
+or production store. They prove device/global caps under concurrency, idempotent
+refunds, concurrent-success preservation, reset races, malformed counters and
+month expiration/rollover. Without the executable this integration test explicitly
+skips, while the remaining HTTP/protocol tests still run.
 
-## Deploy (one time)
+After deploying a preview, use test credentials and a test Redis database:
 
-1. **Get an Agnes key** from https://apihub.agnes-ai.com and keep it handy.
-2. **Create the Vercel project** from this repo with **Root Directory = `hosted/`**
-   (Vercel → New Project → Import → set Root Directory).
-3. **Add Upstash Redis**: Vercel project → Storage → Marketplace → Upstash → create a
-   database and connect it. This injects `UPSTASH_REDIS_REST_URL` / `..._TOKEN`.
-4. **Set Environment Variables** (Vercel → Settings → Environment Variables) from
-   [.env.example](.env.example): `APP_TOKEN` (a long random string you choose),
-   `AGNES_API_KEY`, `AGNES_BASE_URL`, `MODEL`, `FREE_LIMIT`, `GLOBAL_MONTHLY_LIMIT`.
-5. **Deploy.** Note the production URL, e.g. `https://chaos-proxy.vercel.app`.
-6. **Wire the app**: in `Chaos/Models/Provider.swift` set
-   `HostedProvider.baseURL = "https://chaos-proxy.vercel.app/api"` and
-   `HostedProvider.bundledCredential = "<the APP_TOKEN you chose>"`. Cut a new app
-   release so the DMG ships with the hosted tier enabled.
-
-## Verify
-
-```bash
-# Replace HOST and TOKEN. A 16+ char fake device hash is fine for testing.
+```sh
 curl -i -X POST "$HOST/api/chat/completions" \
   -H "Authorization: Bearer $APP_TOKEN:testdevicehash0001" \
   -H "Content-Type: application/json" \
-  -d '{"model":"x","messages":[{"role":"user","content":"reply with: ok"}]}'
+  -d '{"messages":[{"role":"user","content":"reply with: ok"}]}'
+
+curl "$HOST/api/usage" \
+  -H "Authorization: Bearer $APP_TOKEN:testdevicehash0001"
 ```
 
-Expect `200` with `X-Chaos-Trial-Remaining: 19`. Repeat past `FREE_LIMIT` → `402`. A wrong
-`APP_TOKEN` → `401`. Temporarily set `GLOBAL_MONTHLY_LIMIT=1` to confirm the global cap.
-
-## Free-trial usage & reset
-
-```bash
-# How many free names a device has used (no increment):
-curl -s "$HOST/api/usage" -H "Authorization: Bearer $APP_TOKEN:<deviceHash>"
-# → {"used":3,"limit":3,"remaining":0,"globalSpent":5,"globalLimit":100000}
-
-# Reset that device's counter (requires ADMIN_TOKEN); add ?global=1 to also clear
-# this month's global budget counter:
-curl -s -X POST "$HOST/api/usage?global=1" \
-  -H "Authorization: Bearer $APP_TOKEN:<deviceHash>" \
-  -H "x-admin-token: $ADMIN_TOKEN"
-```
-
-The Chaos app surfaces `GET /api/usage` behind **Settings → Naming Service → Check free
-trial**. Reset is admin-only and intended for testing/ops.
-
-> Reminder: changing any env var (e.g. `FREE_LIMIT`) only takes effect after a **redeploy**.
-
-## Local typecheck
-
-```bash
-npm install
-npm run typecheck
-```
+Check that the first success reports 19 remaining at the default limit, invalid
+credentials get 401, exhausted quotas get 402, and a failed upstream call leaves
+usage unchanged. Use the admin reset endpoint only on intended test devices.
