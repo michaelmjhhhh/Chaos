@@ -3,7 +3,7 @@
 Baseline: `3209622034e03d25b3a53b0d4be06d1c245b88d7` (`origin/main` when the
 migration branch was created). The original **94 Swift tests passed** before the
 implementation was replaced. The new application is pinned to **MyGo v0.4.6** and
-Go 1.27.1; its framework review and native examples are linked in
+Go 1.27.2; its framework review and native examples are linked in
 [mygo-audit.md](mygo-audit.md).
 
 ## Automated regression coverage
@@ -65,6 +65,42 @@ Native bitmap renders can be reproduced with:
 ```sh
 CHAOS_UI_ARTIFACTS=/tmp/chaos-ui-artifacts go test -count=1 ./internal/desktop
 ```
+
+## Dependency security check
+
+On 2026-10-13, official `govulncheck` **v1.9.0** flagged ten standard-library
+advisories through the Go 1.27.1 call graph:
+[GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617),
+[6613](https://pkg.go.dev/vuln/GO-2026-6613),
+[6612](https://pkg.go.dev/vuln/GO-2026-6612),
+[6611](https://pkg.go.dev/vuln/GO-2026-6611),
+[6610](https://pkg.go.dev/vuln/GO-2026-6610),
+[6609](https://pkg.go.dev/vuln/GO-2026-6609),
+[6608](https://pkg.go.dev/vuln/GO-2026-6608),
+[6607](https://pkg.go.dev/vuln/GO-2026-6607),
+[6605](https://pkg.go.dev/vuln/GO-2026-6605), and
+[6603](https://pkg.go.dev/vuln/GO-2026-6603).
+It also reported three without a reachable call:
+[GO-2026-6604](https://pkg.go.dev/vuln/GO-2026-6604),
+[6600](https://pkg.go.dev/vuln/GO-2026-6600), and
+[6599](https://pkg.go.dev/vuln/GO-2026-6599).
+Static reachability does not establish exploitability of every reported path.
+
+All thirteen are fixed by [Go 1.27.2, released October 8](https://go.dev/doc/devel/release#go1.27.2),
+which is now required by `go.mod`. Both default and production-tag rescans used the actual
+downloaded `go1.27.2 darwin/arm64` toolchain and checked six application packages,
+15 modules, and the standard library. Both exited successfully with **no known
+vulnerabilities found**. MyGo remains pinned to v0.4.6; third-party dependency
+versions were unchanged. `go mod tidy` completed successfully.
+
+```sh
+go version
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -show=verbose ./...
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -tags=mygo_noinspector -show=verbose ./...
+```
+
+This is a check against the current Go vulnerability database, not a guarantee
+against undisclosed issues or an audit of native OS libraries.
 
 ## Packaged macOS checks
 

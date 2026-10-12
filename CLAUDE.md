@@ -3,7 +3,8 @@
 Chaos is a native Go screenshot organizer. MyGo v0.4.6 renders the desktop with
 `ui.View`; there is no WebView, TypeScript frontend, Swift target, or cgo requirement
 for production builds. macOS 15+ is the primary supported desktop. The hosted
-trial API is a separate Go HTTP service.
+trial API is a separate Go HTTP service. The application requires Go 1.27.2,
+including the October 2026 standard-library security fixes.
 
 ## Commands
 

@@ -16,7 +16,7 @@
 <p align="center">
   <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple_Silicon-native-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
-  <img alt="Go 1.27.1" src="https://img.shields.io/badge/Go-1.27.1-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white">
+  <img alt="Go 1.27.2" src="https://img.shields.io/badge/Go-1.27.2-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white">
   <img alt="MyGo native UI" src="https://img.shields.io/badge/MyGo-native_UI-111111?style=flat-square">
 </p>
 
@@ -154,7 +154,7 @@ go test ./...
 open .build/Chaos.app
 ```
 
-Requires macOS 15 or later and Go 1.27.1. Go downloads the pinned toolchain
+Requires macOS 15 or later and Go 1.27.2. Go downloads the pinned toolchain
 automatically. The app uses [MyGo 0.4.6](https://github.com/egoist/mygo/tree/v0.4.6)
 native Go UI: no web frontend, JavaScript runtime, Swift application code, or cgo.
 
