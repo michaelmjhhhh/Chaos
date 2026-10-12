@@ -20,6 +20,7 @@ defaults:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-15, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -33,7 +34,12 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y redis-server
       - name: Format
-        run: test -z "$(gofmt -l cmd internal)"
+        run: |
+          unformatted=$(gofmt -l cmd internal)
+          if [ -n "$unformatted" ]; then
+            gofmt -d cmd internal
+            exit 1
+          fi
       - name: Vet
         run: go vet ./...
       - name: Test with race detector
