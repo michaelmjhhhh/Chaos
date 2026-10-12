@@ -2,26 +2,15 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-swift build
-
-APP_DIR=".build/Chaos.app/Contents"
-rm -rf ".build/Chaos.app"
-mkdir -p "$APP_DIR/MacOS"
-mkdir -p "$APP_DIR/Resources"
-cp .build/debug/Chaos "$APP_DIR/MacOS/Chaos"
-cp Chaos/Info.plist "$APP_DIR/Info.plist"
-
-ICONSET_DIR=".build/Chaos.iconset"
-rm -rf "$ICONSET_DIR"
-cp -R Chaos/Resources/Assets.xcassets/AppIcon.appiconset "$ICONSET_DIR"
-rm "$ICONSET_DIR/Contents.json"
-iconutil -c icns "$ICONSET_DIR" -o "$APP_DIR/Resources/Chaos.icns"
-
-if [ -d ".build/debug/Chaos_Chaos.bundle" ]; then
-    cp -R .build/debug/Chaos_Chaos.bundle "$APP_DIR/Resources/"
+CGO_ENABLED=0 go run github.com/egoist/mygo/cmd/mygo build -skip-dmg -o .build/mygo -sign "${CODESIGN_IDENTITY:--}"
+BUILT_APP=".build/mygo/darwin-$(go env GOARCH)/Chaos.app"
+if [ ! -d "$BUILT_APP" ]; then
+    echo "MyGo did not produce the expected bundle: $BUILT_APP" >&2
+    exit 1
 fi
-
-codesign --force --deep --sign - ".build/Chaos.app"
+rm -rf ".build/Chaos.app"
+cp -R "$BUILT_APP" ".build/Chaos.app"
+codesign --verify --deep --strict ".build/Chaos.app"
 
 echo "Built: .build/Chaos.app"
 echo "Run:   open .build/Chaos.app"

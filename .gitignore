@@ -7,3 +7,9 @@ DerivedData/
 *.xcworkspace/xcuserdata/
 .DS_Store
 *.app
+.mygo/
+/server
+/Chaos
+/chaos-hosted
+/coverage.out
+/artifacts/

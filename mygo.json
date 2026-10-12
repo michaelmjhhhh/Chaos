@@ -1,0 +1,17 @@
+{
+  "name": "Chaos",
+  "identifier": "com.chaos.app",
+  "version": "1.1.0",
+  "main": "./cmd/chaos",
+  "icon": "resources/icon.png",
+  "out": "dist",
+  "macos": {
+    "minimumSystemVersion": "15.0",
+    "signingIdentity": "-",
+    "infoPlist": {
+      "NSDesktopFolderUsageDescription": "Chaos watches the folder you select to name and organize new screenshots.",
+      "NSDocumentsFolderUsageDescription": "Chaos files images in the output folder you select.",
+      "NSDownloadsFolderUsageDescription": "Chaos organizes images you choose from Downloads."
+    }
+  }
+}

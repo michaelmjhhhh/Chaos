@@ -1,4 +1,5 @@
 # Developer tooling for Chaos. Install with: brew bundle
-# These power the lint/format checks run in CI (see .github/workflows/ci.yml).
-brew "swiftformat"
-brew "swiftlint"
+# Go automatically downloads the toolchain pinned by go.mod.
+brew "go"
+# Optional: exercises the hosted proxy's real Lua quota integration tests.
+brew "redis"
