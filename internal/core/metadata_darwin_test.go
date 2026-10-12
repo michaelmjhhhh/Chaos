@@ -3,6 +3,7 @@
 package core
 
 import (
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"testing"
@@ -32,5 +33,32 @@ func TestMovePreservesMacExtendedAttributes(t *testing.T) {
 	info, _ := os.Stat(destination)
 	if info.Mode().Perm() != 0600 {
 		t.Fatal("mode changed")
+	}
+}
+
+func TestMovePreservesMacCreationDate(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "old.png")
+	writeTestFile(t, source, []byte("image"))
+	var birth [16]byte
+	binary.NativeEndian.PutUint64(birth[:8], 946684800)
+	attrs := unix.Attrlist{Bitmapcount: 5, Commonattr: unix.ATTR_CMN_CRTIME}
+	if err := unix.Setattrlist(source, &attrs, birth[:], unix.FSOPT_NOFOLLOW); err != nil {
+		t.Fatal(err)
+	}
+	var before unix.Stat_t
+	if err := unix.Stat(source, &before); err != nil {
+		t.Fatal(err)
+	}
+	destination, err := MoveFile(source, filepath.Join(dir, "out"), "dated")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var after unix.Stat_t
+	if err = unix.Stat(destination, &after); err != nil {
+		t.Fatal(err)
+	}
+	if before.Btim != after.Btim {
+		t.Fatalf("birthtime changed: before %v after %v", before.Btim, after.Btim)
 	}
 }

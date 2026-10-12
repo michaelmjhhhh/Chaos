@@ -36,7 +36,7 @@ CREATE TABLE processed_images (
 CREATE INDEX idx_processed_images_timestamp ON processed_images(timestamp);
 ```
 
-GRDB migration identifier is `v1_createProcessedImages`. GRDB stores UTC timestamps as `yyyy-MM-dd HH:mm:ss.SSS`; this was verified in its checked-out Foundation date encoder. The importer accepts those timestamps and RFC3339 values. New rows retain the original format for compatibility. Error rows preserve empty destination fields and their original source path.
+GRDB migration identifier is `v1_createProcessedImages`. Existing markers are preserved, and Go-created databases receive the same marker so the previous Swift release can reopen them during rollback. GRDB stores UTC timestamps as `yyyy-MM-dd HH:mm:ss.SSS`; this was verified in its checked-out Foundation date encoder. The importer accepts those timestamps and RFC3339 values. New rows retain the original format for compatibility. Error rows preserve empty destination fields and their original source path.
 
 Legacy `history.json` has camelCase record fields. Executing the Swift synthesized encoder confirmed the result forms `{"success":{}}` and `{"error":{"_0":"message"}}`. Timestamps are seconds since 2001-01-01, requiring **978307200 seconds added** to obtain Unix time. The Go importer validates first, commits one transaction, retains original IDs and merges without duplicating existing rows. Corrupt input remains untouched. Backup naming never replaces an earlier `.migrated` file.
 
@@ -58,14 +58,14 @@ Native preferences requiring separate migration are `autoStart`, `hasCompletedOn
 | --- | --- |
 | Watcher marked a name seen before its bytes were stable; small initial writes were lost forever. | Baseline is captured synchronously; pending files stabilize before validation and only then become handled. A new file reusing a name is recognized by identity and metadata. |
 | Watcher used a two-second timestamp approximation to ignore existing files. | Explicit initial directory snapshot excludes every existing file, even a freshly created screenshot. |
-| Revert can immediately feed a restored screenshot back into the watcher. | Suppression can be registered before destination publication and follows that file identity while a fallback copy completes. |
+| Revert can immediately feed a restored screenshot back into the watcher. | Suppression can be registered before destination publication and follows that file identity while a fallback copy completes. Directory identity comparison handles symlinks and macOS `/tmp` versus `/private/tmp` aliases. |
 | Simultaneous watcher, retries and batches interleaved the single progress state. | Core exposes preparation plans; the controller owns one serialized work queue and deduplication. |
 | Clipboard failure after move recorded a failure with no destination. | Core returns the completed move independently; clipboard, sound and notifications are controller postprocessing concerns. |
 | Health checks consumed a hosted free name. | Hosted health uses the non-consuming usage endpoint. Other providers use a small explicit completion test and parse its result. |
 | Move collision check could race; a direct Go `os.Rename` replacement would overwrite destinations. | Fully written temporary file plus no-clobber hard-link publication; O_EXCL copy fallback for filesystems without hard links. Both retain the source until the destination is synced. |
 | Source could be replaced while moving. | Identity, size and modification time are checked before publication and again before source unlink. A late replacement remains untouched and yields a recoverable `MoveError` with destination. |
 | Cross-volume behavior needed to survive migration. | Temporary copy in destination directory works across volumes; no EXDEV-dependent rename assumption. |
-| Plain byte copying loses Finder metadata. | macOS extended attributes and file mode/mtime are copied, including Finder tags and image metadata, where the filesystem supports them. |
+| Plain byte copying loses Finder metadata and changes Date Created. | macOS extended attributes, creation date, file mode and modification time are copied, including Finder tags and image metadata, where the filesystem supports them. Private OS-managed security markers remain OS-managed. |
 | Filesystem writes preceded detached history persistence. | Move hooks run before exact destination publication, allowing a controller journal; history writes are synchronous and errors are surfaced. Inserts are idempotent by ID for recovery. |
 | Malformed legacy JSON could be archived as empty history; existing backups were removed. | Strict decode/validation, transactional merge, preserved corrupt source and collision-free backups. |
 | Model output could exceed filesystem filename limits. | Sanitization caps UTF-8 basename bytes, leaving room for extension and collision suffixes. |
@@ -95,8 +95,8 @@ The baseline contained 94 Swift test functions, including one watcher test that 
 
 - Existing GRDB schema/metadata and UTC milliseconds; insert/update/delete; Swift reference epoch and enum decoding; migration merge/idempotency; preserved corrupt input and older backups.
 - 513 persisted records with a 500-item display cap, full today totals, categories/types, timing, empty analytics, month boundaries and a New York DST streak.
-- Twelve concurrent same-basename moves without overwrite or content loss; revert collision; same-name no-op; journal failure before publication; late source replacement; unsupported-hardlink publication path; macOS extended-attribute preservation.
-- Fresh baseline exclusion, partially written PNG detection, recreated same name, invalid/non-image rejection, pre-publication revert suppression, cancellation and watcher restart.
+- Twelve concurrent same-basename moves without overwrite or content loss; revert collision; same-name no-op; journal failure before publication; late source replacement; unsupported-hardlink publication path; macOS extended-attribute and exact creation-date preservation.
+- Fresh baseline exclusion, partially written PNG detection, recreated same name, invalid/non-image rejection, pre-publication revert suppression through directory aliases, cancellation and watcher restart.
 - PNG resizing, white transparency backing, JPEG orientation transformation, corrupt/missing image rejection, fake-provider request payloads and response variants, friendly 401/402/404/429/503 recovery, cancellation, and hosted health without consuming a completion.
 - Temporary-directory end-to-end image preparation → local fake vision server → naming/move, verifying original file bytes are unchanged.
 

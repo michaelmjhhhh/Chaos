@@ -40,7 +40,9 @@ func OpenStore(path, legacyJSON string) (*Store, error) {
  id TEXT PRIMARY KEY, originalName TEXT NOT NULL, newName TEXT NOT NULL,
  path TEXT NOT NULL, sourcePath TEXT NOT NULL, timestamp DATETIME NOT NULL,
  duration DOUBLE NOT NULL, isError BOOLEAN NOT NULL, errorMessage TEXT, ext TEXT NOT NULL);
- CREATE INDEX IF NOT EXISTS idx_processed_images_timestamp ON processed_images(timestamp);`)
+ CREATE INDEX IF NOT EXISTS idx_processed_images_timestamp ON processed_images(timestamp);
+ CREATE TABLE IF NOT EXISTS grdb_migrations(identifier TEXT NOT NULL PRIMARY KEY);
+ INSERT INTO grdb_migrations(identifier) VALUES('v1_createProcessedImages') ON CONFLICT(identifier) DO NOTHING;`)
 	if err != nil {
 		return nil, fmt.Errorf("open history: %w", err)
 	}
