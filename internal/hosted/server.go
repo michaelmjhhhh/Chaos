@@ -109,16 +109,23 @@ func (s *Server) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		default:
 			// A lost Redis response may have reserved quota; the unique token
 			// permits a safe best-effort refund without sending a paid request.
-			s.refund(reservation)
+			s.refund(reservation, true)
 			s.log.Error("hosted quota reservation failed", "error", err)
 			writeError(w, http.StatusServiceUnavailable, "Free naming is temporarily unavailable. Try again.")
 		}
 		return
 	}
 	committed := false
+	refundGlobal := true
 	defer func() {
-		if !committed {
-			s.refund(reservation)
+		if committed {
+			cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
+			defer stop()
+			if err := s.quota.Commit(cleanup, reservation); err != nil {
+				s.log.Error("hosted reservation cleanup failed", "error", err)
+			}
+		} else {
+			s.refund(reservation, refundGlobal)
 		}
 	}()
 	ctx, cancel := context.WithTimeout(r.Context(), s.config.UpstreamTimeout)
@@ -130,26 +137,27 @@ func (s *Server) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	request.Header.Set("Authorization", "Bearer "+s.config.APIKey)
 	request.Header.Set("Content-Type", "application/json")
+	if ctx.Err() != nil {
+		writeError(w, http.StatusBadGateway, "Naming request was cancelled before contacting the service.")
+		return
+	}
+	// Once transport starts, a timeout/disconnect can hide a billable provider
+	// request. Only an explicit non-success response proves a rejected call.
+	refundGlobal = false
 	response, err := s.client.Do(request)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "Naming service is unreachable. Try again.")
 		return
 	}
 	defer response.Body.Close()
+	successful := response.StatusCode >= 200 && response.StatusCode < 300
+	refundGlobal = !successful
 	payload, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
 	if err != nil || len(payload) > MaxResponseBytes {
 		writeError(w, http.StatusBadGateway, "Naming service returned an invalid response. Try again.")
 		return
 	}
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		// Counters already include this request. Failure to discard the token
-		// must not refund a completed paid request or allow quota overspend.
-		committed = true
-		cleanup, stop := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := s.quota.Commit(cleanup, reservation); err != nil {
-			s.log.Error("hosted reservation cleanup failed", "error", err)
-		}
-		stop()
+	if successful {
 		w.Header().Set("X-Chaos-Trial-Remaining", strconv.FormatInt(max(0, s.config.FreeLimit-reservation.Used), 10))
 	}
 	contentType := response.Header.Get("Content-Type")
@@ -158,7 +166,8 @@ func (s *Server) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(response.StatusCode)
-	_, _ = w.Write(payload)
+	_, err = w.Write(payload)
+	committed = successful && err == nil
 }
 
 func (s *Server) Usage(w http.ResponseWriter, r *http.Request) {
@@ -225,13 +234,19 @@ func sameSecret(got, want string) bool {
 	return want != "" && subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
 
-func (s *Server) refund(reservation Reservation) {
+func (s *Server) refund(reservation Reservation, global bool) {
 	if reservation.ID == "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.quota.Rollback(ctx, reservation); err != nil {
+	var err error
+	if global {
+		err = s.quota.Rollback(ctx, reservation)
+	} else {
+		err = s.quota.RefundDevice(ctx, reservation)
+	}
+	if err != nil {
 		// Conservatively leave the counters consumed if Redis cannot confirm
 		// the refund. Never overwrite a counter with an earlier snapshot.
 		s.log.Error("hosted quota refund failed", "error", err)

@@ -31,6 +31,7 @@ type QuotaStore interface {
 	Reserve(context.Context, string, string, int64, int64) (Reservation, error)
 	Commit(context.Context, Reservation) error
 	Rollback(context.Context, Reservation) error
+	RefundDevice(context.Context, Reservation) error
 	Usage(context.Context, string, string) (used, globalSpent int64, err error)
 	Reset(context.Context, string, string, bool) error
 }

@@ -56,6 +56,12 @@ func (q *testQuota) Commit(_ context.Context, r Reservation) error {
 	return q.err
 }
 func (q *testQuota) Rollback(_ context.Context, r Reservation) error {
+	return q.refund(r, true)
+}
+func (q *testQuota) RefundDevice(_ context.Context, r Reservation) error {
+	return q.refund(r, false)
+}
+func (q *testQuota) refund(r Reservation, global bool) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if q.err != nil {
@@ -63,7 +69,9 @@ func (q *testQuota) Rollback(_ context.Context, r Reservation) error {
 	}
 	if q.active[r.ID] {
 		q.used--
-		q.spent--
+		if global {
+			q.spent--
+		}
 		delete(q.active, r.ID)
 	}
 	return nil
@@ -237,8 +245,8 @@ func TestUpstreamFailuresRefund(t *testing.T) {
 	if w := request(s, "POST", "/api/chat/completions", `{"messages":[{}]}`, "Bearer app-secret:"+testDevice, ""); w.Code != 502 {
 		t.Fatalf("timeout: %d", w.Code)
 	}
-	if q.used != 0 || q.spent != 0 {
-		t.Fatal("timeout wasn't refunded")
+	if q.used != 0 || q.spent != 1 {
+		t.Fatal("uncertain timeout must refund only the device allowance")
 	}
 }
 
@@ -266,14 +274,24 @@ func TestUsageAndAdminReset(t *testing.T) {
 	}
 }
 
-func TestOversizedUpstreamRefundsQuota(t *testing.T) {
+func TestOversizedUpstreamRefundsOnlyDeviceQuota(t *testing.T) {
 	q := &testQuota{}
 	s := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, strings.Repeat("x", MaxResponseBytes+1))
 	}, q)
 	w := request(s, "POST", "/api/chat/completions", `{"messages":[{}]}`, "Bearer app-secret:"+testDevice, "")
+	if w.Code != 502 || q.used != 0 || q.spent != 1 {
+		t.Fatalf("oversized response refunded billable budget: status=%d usage=%d,%d", w.Code, q.used, q.spent)
+	}
+}
+
+func TestPredispatchFailureRefundsBothCounters(t *testing.T) {
+	q := &testQuota{}
+	s := newTestServer(t, func(http.ResponseWriter, *http.Request) { t.Error("invalid request reached upstream") }, q)
+	s.config.BaseURL = "http://%"
+	w := request(s, "POST", "/api/chat/completions", `{"messages":[{}]}`, "Bearer app-secret:"+testDevice, "")
 	if w.Code != 502 || q.used != 0 || q.spent != 0 {
-		t.Fatalf("oversized response charged quota: status=%d usage=%d,%d", w.Code, q.used, q.spent)
+		t.Fatalf("predispatch failure consumed quota: status=%d usage=%d,%d", w.Code, q.used, q.spent)
 	}
 }
 

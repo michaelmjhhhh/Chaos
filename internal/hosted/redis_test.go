@@ -178,6 +178,62 @@ func TestRedisQuotaIntegration(t *testing.T) {
 			}
 		}
 	})
+	t.Run("device refund retains global budget and is idempotent", func(t *testing.T) {
+		resetDB()
+		failed, err := s.Reserve(ctx, "device", "2026-10", 20, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		success, err := s.Reserve(ctx, "device", "2026-10", 20, 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Commit(ctx, success); err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			if err := s.RefundDevice(ctx, failed); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := s.Rollback(ctx, failed); err != nil {
+			t.Fatal(err)
+		}
+		u, g := usage("device")
+		if u != 1 || g != 2 {
+			t.Fatalf("device refund altered billable budget/concurrent success: %d,%d", u, g)
+		}
+	})
+	t.Run("device refund across administrative reset", func(t *testing.T) {
+		for _, global := range []bool{false, true} {
+			resetDB()
+			old, err := s.Reserve(ctx, "device", "2026-10", 20, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Reset(ctx, "device", "2026-10", global); err != nil {
+				t.Fatal(err)
+			}
+			fresh, err := s.Reserve(ctx, "device", "2026-10", 20, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Commit(ctx, fresh); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.RefundDevice(ctx, old); err != nil {
+				t.Fatal(err)
+			}
+			u, g := usage("device")
+			wantGlobal := int64(2)
+			if global {
+				wantGlobal = 1
+			}
+			if u != 1 || g != wantGlobal {
+				t.Fatalf("device refund reset global=%v erased usage: %d,%d", global, u, g)
+			}
+		}
+	})
 	t.Run("corruption fails closed", func(t *testing.T) {
 		resetDB()
 		var out string
@@ -205,6 +261,52 @@ func TestRedisQuotaIntegration(t *testing.T) {
 			t.Fatalf("new month blocked: %v", err)
 		}
 	})
+}
+
+func TestRedisHTTPGlobalBudgetSurvivesUndeliveredResponses(t *testing.T) {
+	q := localRedis(t)
+	for _, failure := range []string{"timeout before headers", "timeout after success headers", "truncated", "oversized"} {
+		t.Run(failure, func(t *testing.T) {
+			var out string
+			if err := q.command(context.Background(), &out, "FLUSHDB"); err != nil {
+				t.Fatal(err)
+			}
+			var calls atomic.Int64
+			s := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				_, _ = io.Copy(io.Discard, r.Body)
+				switch failure {
+				case "timeout before headers":
+					<-r.Context().Done()
+				case "timeout after success headers":
+					w.WriteHeader(http.StatusOK)
+					w.(http.Flusher).Flush()
+					<-r.Context().Done()
+				case "truncated":
+					w.Header().Set("Content-Length", "100")
+					_, _ = io.WriteString(w, `{}`)
+				case "oversized":
+					_, _ = io.WriteString(w, strings.Repeat("x", MaxResponseBytes+1))
+				}
+			}, q)
+			s.config.GlobalLimit = 1
+			s.config.UpstreamTimeout = 100 * time.Millisecond
+			for i := range 3 {
+				w := request(s, "POST", "/api/chat/completions", `{"messages":[{}]}`, "Bearer app-secret:"+testDevice, "")
+				want := http.StatusPaymentRequired
+				if i == 0 {
+					want = http.StatusBadGateway
+				}
+				if w.Code != want {
+					t.Fatalf("attempt %d status=%d want=%d", i, w.Code, want)
+				}
+			}
+			u, g, err := q.Usage(context.Background(), testDevice, s.now().UTC().Format("2006-01"))
+			if err != nil || u != 0 || g != 1 || calls.Load() != 1 {
+				t.Fatalf("escaped budget: upstream=%d usage=%d,%d err=%v", calls.Load(), u, g, err)
+			}
+		})
+	}
 }
 
 func localRedis(t *testing.T) *RedisStore {

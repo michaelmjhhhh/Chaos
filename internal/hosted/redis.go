@@ -44,7 +44,7 @@ local used = tonumber(redis.call('GET', KEYS[1]) or '0')
 local spent = tonumber(redis.call('GET', KEYS[2]) or '0')
 if not used or not spent or used < 0 or spent < 0 then return redis.error_reply('invalid quota counter') end
 if dg == (redis.call('GET', KEYS[3]) or '0') and used > 0 then redis.call('DECR', KEYS[1]) end
-if bg == (redis.call('GET', KEYS[4]) or '0') and spent > 0 then redis.call('DECR', KEYS[2]) end
+if ARGV[1] == '1' and bg == (redis.call('GET', KEYS[4]) or '0') and spent > 0 then redis.call('DECR', KEYS[2]) end
 redis.call('DEL', KEYS[5])
 return 1
 `
@@ -114,11 +114,21 @@ func (s *RedisStore) Commit(ctx context.Context, r Reservation) error {
 }
 
 func (s *RedisStore) Rollback(ctx context.Context, r Reservation) error {
+	return s.refund(ctx, r, "1")
+}
+
+// RefundDevice preserves the global budget for a dispatched request that may
+// have been billed, while restoring the device's undelivered naming allowance.
+func (s *RedisStore) RefundDevice(ctx context.Context, r Reservation) error {
+	return s.refund(ctx, r, "0")
+}
+
+func (s *RedisStore) refund(ctx context.Context, r Reservation, global string) error {
 	if r.ID == "" {
 		return nil
 	}
 	var result int64
-	return s.command(ctx, &result, evalArgs(rollbackScript, r)...)
+	return s.command(ctx, &result, evalArgs(rollbackScript, r, global)...)
 }
 
 func (s *RedisStore) Usage(ctx context.Context, device, month string) (int64, int64, error) {

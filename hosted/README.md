@@ -70,8 +70,13 @@ under concurrent calls. Cut traffic over after checking the preview.
 A single [Redis EVAL](https://upstash.com/docs/redis/commands/scripting/eval)
 checks both counters and reserves one unit of each before contacting the paid
 provider. Concurrent requests cannot pass separate read-then-increment checks.
-The monthly budget has a 35-day TTL. Failed upstream requests refund only their
-own reservation; successful requests keep their reserved counters.
+The monthly budget has a 35-day TTL. Successful requests keep both reserved
+counters. Failures before transport dispatch and explicit non-2xx provider
+rejections refund both counters. After dispatch, an uncertain transport failure
+or unreadable, truncated, oversized, or undeliverable successful response refunds
+only the device allowance: the global budget remains consumed because the
+provider may already have billed that call. Connection failures can therefore
+conservatively consume global budget, even when no provider charge occurred.
 
 Reservation IDs make rollback idempotent. Counter generation stamps make an
 old in-flight request's refund safe even after an administrative reset, without
@@ -105,8 +110,9 @@ requests. For the actual Lua integration tests, put `redis-server` on `PATH` or
 set `REDIS_SERVER_BIN` to its executable. Tests start an isolated temporary Redis
 process behind a local HTTP protocol bridge; they never touch a remote account
 or production store. They prove device/global caps under concurrency, idempotent
-refunds, concurrent-success preservation, reset races, malformed counters and
-month expiration/rollover. Without the executable this integration test explicitly
+refunds, concurrent-success preservation, reset races, malformed counters,
+month expiration/rollover, and the hard global ceiling after timed-out,
+truncated, or oversized upstream responses. Without the executable this integration test explicitly
 skips, while the remaining HTTP/protocol tests still run.
 
 After deploying a preview, use test credentials and a test Redis database:
