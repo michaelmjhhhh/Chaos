@@ -10,8 +10,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Preserve Finder tags, image metadata and resource forks across the temporary
-// copy. Filesystems without extended attributes retain the image bytes/mtime.
+// Preserve Finder metadata and security across the temporary copy. ACLs are
+// separate from xattrs on macOS and must be copied with the public ACL API.
 func copyMetadata(source, destination string) error {
 	var stat unix.Stat_t
 	if err := unix.Stat(source, &stat); err != nil {
@@ -24,6 +24,23 @@ func copyMetadata(source, destination string) error {
 	if err := unix.Setattrlist(destination, &attrs, birth[:], unix.FSOPT_NOFOLLOW); err != nil && !errors.Is(err, unix.ENOTSUP) {
 		return err
 	}
+	if err := copyExtendedAttributes(source, destination); err != nil {
+		return err
+	}
+	// Only ordinary user metadata flags belong on an unpublished copy. The
+	// kernel manages compression/tracking flags; immutable and append-only flags
+	// would prevent rollback cleanup if publication or the journal hook fails.
+	const safeFlags = unix.UF_NODUMP | unix.UF_HIDDEN
+	if stat.Flags&safeFlags != 0 {
+		if err := unix.Chflags(destination, int(stat.Flags&safeFlags)); err != nil {
+			return err
+		}
+	}
+	// Apply access restrictions last, after writing all other metadata.
+	return copyACL(source, destination)
+}
+
+func copyExtendedAttributes(source, destination string) error {
 	size, err := unix.Listxattr(source, nil)
 	if errors.Is(err, unix.ENOTSUP) {
 		return nil

@@ -31,61 +31,79 @@ const maxImagePixels int64 = 40_000_000
 // PrepareImage validates, orients, downsizes and JPEG-encodes an image. Native
 // macOS HEIC support is delegated to its installed ImageIO-backed sips utility.
 // No shell is used and no provider request occurs if decoding fails.
-func PrepareImage(ctx context.Context, path string) (PreparedImage, error) {
+func decodeImage(ctx context.Context, path string, thumbnailHEIC bool) (image.Image, error) {
 	if !AcceptsImage(path) {
-		return PreparedImage{}, errors.New("unsupported image type")
+		return nil, errors.New("unsupported image type")
 	}
 	info, err := os.Lstat(path)
 	if err != nil {
-		return PreparedImage{}, err
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return PreparedImage{}, errors.New("source must be a regular image file")
+		return nil, errors.New("source must be a regular image file")
 	}
 	if info.Size() <= 0 || info.Size() > MaxImageBytes {
-		return PreparedImage{}, errors.New("image must be between 1 byte and 100 MiB")
+		return nil, errors.New("image must be between 1 byte and 100 MiB")
 	}
 	original := path
 	if strings.EqualFold(filepath.Ext(path), ".heic") {
 		if runtime.GOOS != "darwin" {
-			return PreparedImage{}, errors.New("HEIC conversion requires macOS")
+			return nil, errors.New("HEIC conversion requires macOS")
 		}
 		dir, err := os.MkdirTemp("", "chaos-image-*")
 		if err != nil {
-			return PreparedImage{}, err
+			return nil, err
 		}
 		defer os.RemoveAll(dir)
-		path = filepath.Join(dir, "prepared.jpg")
-		command := exec.CommandContext(ctx, "/usr/bin/sips", "--resampleHeightWidthMax", "1280", "--setProperty", "format", "jpeg", original, "--out", path)
+		path = filepath.Join(dir, "prepared.png")
+		args := []string{"--setProperty", "format", "png", original, "--out", path}
+		if thumbnailHEIC {
+			args = append([]string{"--resampleHeightWidthMax", "1280"}, args...)
+		}
+		command := exec.CommandContext(ctx, "/usr/bin/sips", args...)
 		if err = command.Run(); err != nil {
-			return PreparedImage{}, fmt.Errorf("decode HEIC image: %w", err)
+			return nil, fmt.Errorf("decode HEIC image: %w", err)
 		}
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return PreparedImage{}, err
+		return nil, err
 	}
 	data, err := boundedRead(f, MaxImageBytes)
 	f.Close()
 	if err != nil {
-		return PreparedImage{}, err
+		return nil, err
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil {
-		return PreparedImage{}, fmt.Errorf("decode image: %w", err)
+		return nil, fmt.Errorf("decode image: %w", err)
 	}
 	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > maxImagePixels {
-		return PreparedImage{}, errors.New("image dimensions exceed the 40 megapixel limit")
+		return nil, errors.New("image dimensions exceed the 40 megapixel limit")
 	}
 	if err = ctx.Err(); err != nil {
-		return PreparedImage{}, err
+		return nil, err
 	}
 	source, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return PreparedImage{}, fmt.Errorf("decode image: %w", err)
+		return nil, fmt.Errorf("decode image: %w", err)
 	}
 	if format == "jpeg" {
 		source = orientImage(source, jpegOrientation(data))
+	}
+	return source, ctx.Err()
+}
+
+// DecodeImage returns the full-quality, oriented image for native clipboard and
+// preview use. It shares validation and format support with API preparation.
+func DecodeImage(ctx context.Context, path string) (image.Image, error) {
+	return decodeImage(ctx, path, false)
+}
+
+func PrepareImage(ctx context.Context, path string) (PreparedImage, error) {
+	source, err := decodeImage(ctx, path, true)
+	if err != nil {
+		return PreparedImage{}, err
 	}
 	bounds := source.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()

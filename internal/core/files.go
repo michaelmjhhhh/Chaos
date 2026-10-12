@@ -29,19 +29,22 @@ func MoveFileWithHook(source, dir, base string, before func(string) error) (stri
 	if ext == "" {
 		ext = ".png"
 	}
-	return moveCandidates(source, dir, Sanitize(base), ext, before)
+	return moveCandidates(source, dir, Sanitize(base), ext, before, false)
 }
 func RenameFile(path, base string) (string, error) { return RenameFileWithHook(path, base, nil) }
 func RenameFileWithHook(path, base string, before func(string) error) (string, error) {
-	return moveCandidates(path, filepath.Dir(path), Sanitize(base), filepath.Ext(path), before)
+	return moveCandidates(path, filepath.Dir(path), Sanitize(base), filepath.Ext(path), before, true)
 }
 func MoveToWithHook(source, target string, before func(string) error) (string, error) {
-	return moveCandidates(source, filepath.Dir(target), strings.TrimSuffix(filepath.Base(target), filepath.Ext(target)), filepath.Ext(target), before)
+	return moveCandidates(source, filepath.Dir(target), strings.TrimSuffix(filepath.Base(target), filepath.Ext(target)), filepath.Ext(target), before, true)
 }
 func RevertFile(path, original string) (string, error) {
 	return RevertFileWithHook(path, original, nil)
 }
 func RevertFileWithHook(path, original string, before func(string) error) (string, error) {
+	if filepath.Clean(path) == filepath.Clean(original) {
+		return path, nil
+	}
 	if _, err := os.Lstat(original); errors.Is(err, os.ErrNotExist) {
 		dst, err := moveExact(path, original, before)
 		if !errors.Is(err, os.ErrExist) {
@@ -49,9 +52,9 @@ func RevertFileWithHook(path, original string, before func(string) error) (strin
 		}
 	}
 	ext := filepath.Ext(original)
-	return moveCandidates(path, filepath.Dir(original), strings.TrimSuffix(filepath.Base(original), ext)+"-restored", ext, before)
+	return moveCandidates(path, filepath.Dir(original), strings.TrimSuffix(filepath.Base(original), ext)+"-restored", ext, before, false)
 }
-func moveCandidates(source, dir, base, ext string, before func(string) error) (string, error) {
+func moveCandidates(source, dir, base, ext string, before func(string) error, allowSame bool) (string, error) {
 	if base == "" || filepath.Base(base) != base || strings.ContainsAny(base, "/\\\x00") {
 		return "", errors.New("invalid filename")
 	}
@@ -62,7 +65,10 @@ func moveCandidates(source, dir, base, ext string, before func(string) error) (s
 		}
 		dst := filepath.Join(dir, name)
 		if filepath.Clean(source) == filepath.Clean(dst) {
-			return source, nil
+			if allowSame {
+				return source, nil
+			}
+			continue
 		}
 		if _, err := os.Lstat(dst); err == nil {
 			continue
@@ -114,6 +120,10 @@ func moveExact(source, destination string, before func(string) error) (string, e
 	temp := output.Name()
 	defer os.Remove(temp)
 	count, copyErr := io.Copy(output, input)
+	inputCloseErr := input.Close() // Windows cannot unlink a source held without FILE_SHARE_DELETE.
+	if copyErr == nil {
+		copyErr = inputCloseErr
+	}
 	if copyErr == nil && count != info.Size() {
 		copyErr = errors.New("source changed while copying")
 	}

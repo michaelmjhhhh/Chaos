@@ -219,14 +219,6 @@ func AtomicWrite(path string, data []byte, mode os.FileMode) error {
 	}
 	return syncDirectory(filepath.Dir(path))
 }
-func syncDirectory(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return f.Sync()
-}
 func endpoint(base, suffix string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(base))
 	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {

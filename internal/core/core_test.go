@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -74,7 +75,7 @@ func TestConfigLegacyMigrationAndCredentialIsolation(t *testing.T) {
 		t.Fatalf("round trip: %#v %v", loaded, err)
 	}
 	info, _ := os.Stat(path)
-	if info.Mode().Perm() != 0600 {
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("permissions %v", info.Mode())
 	}
 	writeTestFile(t, path, []byte("corrupt"))
@@ -124,7 +125,7 @@ func TestNamingSafetyAndTokens(t *testing.T) {
 	if got := RenderName("{date}_{slug}_{time}", "中文测试", at); got != "2026-02-01-中文测试-120405" {
 		t.Fatal(got)
 	}
-	if got := OutputDirectory("/out", "month", at); got != "/out/2026-02" {
+	if got := OutputDirectory("/out", "month", at); got != filepath.Join("/out", "2026-02") {
 		t.Fatal(got)
 	}
 	for _, input := range []string{"../escape", " ", strings.Repeat("文", 300), "a/b\\c\x00d"} {
@@ -437,5 +438,75 @@ func TestNoHardlinkFallbackDoesNotOverwrite(t *testing.T) {
 func TestHostedMissingIdentityValidation(t *testing.T) {
 	if err := (Config{Provider: "chaos-hosted"}).Resolve("/home", "").Validate(); err == nil {
 		t.Fatal("hosted empty identity accepted")
+	}
+}
+
+func TestProcessorPreservesSourceReplacedDuringAnalysis(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.png")
+	sampleImage(t, source, 32, 32)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := os.Remove(source); err != nil {
+			t.Error(err)
+		}
+		if err := os.WriteFile(source, []byte("replacement"), 0600); err != nil {
+			t.Error(err)
+		}
+		fmt.Fprint(w, `{"choices":[{"message":{"content":"old-image-name"}}]}`)
+	}))
+	defer server.Close()
+	processor := Processor{Client: &Client{HTTP: server.Client()}}
+	_, err := processor.Process(context.Background(), source, testConfig(server.URL, filepath.Join(dir, "out")), nil)
+	if err == nil {
+		t.Fatal("replacement was filed under old analysis")
+	}
+	b, _ := os.ReadFile(source)
+	if string(b) != "replacement" {
+		t.Fatal("replacement was moved or deleted")
+	}
+}
+func TestProcessorRejectsChangesDuringImagePreparation(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.png")
+	sampleImage(t, source, 32, 32)
+	called := false
+	processor := Processor{PrepareImage: func(context.Context, string) (PreparedImage, error) {
+		called = true
+		data, _ := os.ReadFile(source)
+		info, _ := os.Stat(source)
+		data[len(data)-1] ^= 0xff
+		if err := os.WriteFile(source, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(source, info.ModTime(), info.ModTime()); err != nil {
+			t.Fatal(err)
+		}
+		return PreparedImage{"eA==", "image/png"}, nil
+	}}
+	_, err := processor.Prepare(context.Background(), source, testConfig("http://127.0.0.1:1", filepath.Join(dir, "out")))
+	if !called || err == nil || !strings.Contains(err.Error(), "changed") {
+		t.Fatalf("in-place change not caught before API: %v", err)
+	}
+}
+func TestDecodeImageAppliesRealJPEGEXIFOrientation(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 16, 8))
+	var encoded bytes.Buffer
+	if err := jpeg.Encode(&encoded, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	exif := []byte{'E', 'x', 'i', 'f', 0, 0, 'I', 'I', 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 1, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0}
+	original := encoded.Bytes()
+	data := append([]byte{}, original[:2]...)
+	data = append(data, 0xff, 0xe1, 0, byte(len(exif)+2))
+	data = append(data, exif...)
+	data = append(data, original[2:]...)
+	path := filepath.Join(t.TempDir(), "portrait.jpg")
+	writeTestFile(t, path, data)
+	decoded, err := DecodeImage(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Bounds().Dx() != 8 || decoded.Bounds().Dy() != 16 {
+		t.Fatalf("EXIF orientation ignored: %v", decoded.Bounds())
 	}
 }
