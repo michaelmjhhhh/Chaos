@@ -148,9 +148,8 @@ exposed the expected control labels, secure key field and history actions.
   public native APIs without cgo. Unsupported nonempty ACL transfer fails safely.
 - The existing local config continues to contain API keys; it is written with
   owner-only permissions, not migrated into an encrypted credential vault.
-- The hosted Go service was exercised locally, including actual Redis, but **was
-  not deployed**. A Vercel rollout must change the project root from `hosted/` to
-  the repository root and preserve existing secrets/Redis data. See
-  [hosted deployment instructions](../../hosted/README.md).
+- The previously validated hosted Go service has since been removed, along with
+  its Redis tests and Vercel build configuration. The remaining `vercel.json`
+  disables automatic Git deployments.
 - The DMG is ad-hoc signed, not notarized. Release tags must match `mygo.json`;
   MyGo's packaged metadata is the single source of the application version.

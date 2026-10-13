@@ -27,8 +27,6 @@ type Snapshot struct {
 	WatcherStartedAt, StartedAt                          time.Time
 	SessionNumber                                        int
 	AutoStart, OnboardingComplete                        bool
-	Usage                                                *core.HostedUsage
-	UsageError                                           string
 	HistoryRevision                                      uint64
 	DataDir, ConfigPath                                  string
 	ResolvedWatchDir, ResolvedOutputDir                  string
@@ -49,10 +47,6 @@ func cloneSnapshot(s Snapshot) Snapshot {
 	if s.Insights.Slowest != nil {
 		v := *s.Insights.Slowest
 		s.Insights.Slowest = &v
-	}
-	if s.Usage != nil {
-		v := *s.Usage
-		s.Usage = &v
 	}
 	return s
 }

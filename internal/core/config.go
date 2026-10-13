@@ -12,11 +12,6 @@ import (
 	"strings"
 )
 
-const HostedBaseURL = "https://chaos-snowy-ten.vercel.app/api"
-const HostedModel = "agnes-2.0-flash"
-
-// HostedAppToken is a public client identifier, not the server's upstream credential.
-const HostedAppToken = "chaostrial2026alpha"
 const DefaultTemplate = "{slug}_{time}"
 
 type Provider struct {
@@ -26,7 +21,6 @@ type Provider struct {
 
 func Providers() []Provider {
 	return []Provider{
-		{"chaos-hosted", "Chaos (recommended)", HostedBaseURL, HostedModel, "Built-in naming, no setup required.", "", false, false},
 		{"siliconrouter", "SiliconRouter", "https://api.siliconrouter.com/v1", "gemini-3-flash-preview", "SiliconRouter hosted API.", "https://siliconrouter.com", true, false},
 		{"openai", "OpenAI", "https://api.openai.com/v1", "gpt-4o-mini", "OpenAI hosted API.", "https://platform.openai.com/api-keys", true, false},
 		{"deepseek", "DeepSeek", "https://api.deepseek.com", "deepseek-v4-flash", "DeepSeek hosted API.", "https://platform.deepseek.com/api_keys", true, false},
@@ -69,14 +63,12 @@ type ResolvedConfig struct {
 	CopyToClipboard, NotifyOnComplete                                                                                bool
 }
 
-func (c Config) Resolve(home, deviceHash string) ResolvedConfig {
+func (c Config) Resolve(home string) ResolvedConfig {
+	c = c.withoutRetiredProvider()
 	p := ProviderByID(c.Provider)
 	r := ResolvedConfig{Provider: p, Model: strings.TrimSpace(c.Model), BaseURL: p.BaseURL, WatchDir: strings.TrimSpace(c.WatchDir), OutputDir: strings.TrimSpace(c.OutputDir), Language: strings.ToLower(strings.TrimSpace(c.Language)), FilenameTemplate: strings.TrimSpace(c.FilenameTemplate), SubfolderRule: c.SubfolderRule, Appearance: c.Appearance, CopyToClipboard: c.CopyToClipboard, NotifyOnComplete: c.NotifyOnComplete}
 	if p.RequiresKey {
 		r.APIKey = strings.TrimSpace(c.APIKey)
-	}
-	if p.ID == "chaos-hosted" {
-		r.APIKey = HostedAppToken + ":" + deviceHash
 	}
 	if p.CustomURL {
 		r.BaseURL = strings.TrimSpace(c.BaseURL)
@@ -119,9 +111,6 @@ func expandHome(path, home string) string {
 	return filepath.Clean(path)
 }
 func (r ResolvedConfig) Validate() error {
-	if r.Provider.ID == "chaos-hosted" && strings.TrimPrefix(r.APIKey, HostedAppToken+":") == "" {
-		return errors.New("could not identify this device for the free trial; reopen Chaos or select your own provider in Settings")
-	}
 	if r.Provider.RequiresKey && strings.TrimSpace(r.APIKey) == "" {
 		return errors.New("API key not configured")
 	}
@@ -134,6 +123,7 @@ func (r ResolvedConfig) Validate() error {
 	return nil
 }
 func (c *Config) SetProvider(id string) {
+	*c = c.withoutRetiredProvider()
 	old := ProviderByID(c.Provider).ID
 	next := ProviderByID(id).ID
 	if old == next {
@@ -152,6 +142,26 @@ func (c *Config) SetProvider(id string) {
 	c.Model = ""
 	c.BaseURL = ""
 }
+
+// withoutRetiredProvider resets the removed trial selection without carrying its
+// model, endpoint or credentials over to a different provider.
+func (c Config) withoutRetiredProvider() Config {
+	if strings.EqualFold(strings.TrimSpace(c.Provider), "chaos-hosted") {
+		c.Provider = Providers()[0].ID
+		c.APIKey, c.Model, c.BaseURL = "", "", ""
+	}
+	if _, ok := c.ProviderKeys["chaos-hosted"]; ok {
+		keys := make(map[string]string, len(c.ProviderKeys))
+		for id, key := range c.ProviderKeys {
+			if id != "chaos-hosted" {
+				keys[id] = key
+			}
+		}
+		c.ProviderKeys = keys
+	}
+	return c
+}
+
 func LoadConfig(path, legacyPath string) (Config, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) && legacyPath != "" {
@@ -164,7 +174,7 @@ func LoadConfig(path, legacyPath string) (Config, error) {
 			if err = SaveConfig(path, cfg); err != nil {
 				return Config{}, err
 			}
-			return cfg, nil
+			return cfg.withoutRetiredProvider(), nil
 		}
 	}
 	if errors.Is(err, os.ErrNotExist) {
@@ -175,15 +185,15 @@ func LoadConfig(path, legacyPath string) (Config, error) {
 	}
 	var cfg Config
 	if len(strings.TrimSpace(string(data))) == 0 {
-		return cfg, nil
+		return cfg.withoutRetiredProvider(), nil
 	}
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("configuration is invalid (original preserved): %w", err)
 	}
-	return cfg, nil
+	return cfg.withoutRetiredProvider(), nil
 }
 func SaveConfig(path string, cfg Config) error {
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := json.MarshalIndent(cfg.withoutRetiredProvider(), "", "  ")
 	if err != nil {
 		return err
 	}

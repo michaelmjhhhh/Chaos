@@ -3,15 +3,12 @@ package app
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -111,56 +108,6 @@ func legacyPreferences(run commandRunner) Preferences {
 	p.OnboardingComplete = read("hasCompletedOnboarding") == "1"
 	p.SessionNumber, _ = strconv.Atoi(read("chaos.sessionNumber"))
 	return p
-}
-
-var hardwareUUIDPattern = regexp.MustCompile(`"IOPlatformUUID"\s*=\s*"([^"]+)"`)
-
-// DeviceHash preserves the Swift identity exactly, including hardware UUID casing.
-// Only the salted hash leaves the machine. Commands are argument arrays, never shell.
-func DeviceHash(dataDir string) (string, error) {
-	return deviceHash(dataDir, runtime.GOOS, runCommand)
-}
-
-func deviceHash(dataDir, platform string, run commandRunner) (string, error) {
-	command := func(name string, args ...string) ([]byte, error) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		return run(ctx, name, args...)
-	}
-	var seed string
-	if platform == "darwin" {
-		if b, err := command("/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"); err == nil {
-			if match := hardwareUUIDPattern.FindSubmatch(b); len(match) == 2 {
-				seed = string(match[1])
-			}
-		}
-		if seed == "" {
-			if b, err := command("/usr/bin/security", "find-generic-password", "-s", "com.chaos.app.device", "-a", "device-seed", "-w"); err == nil {
-				seed = strings.TrimSpace(string(b))
-			}
-		}
-		if seed == "" {
-			seed = newUUID()
-			if _, err := command("/usr/bin/security", "add-generic-password", "-U", "-s", "com.chaos.app.device", "-a", "device-seed", "-w", seed); err != nil {
-				return "", errors.New("cannot save the device identity to Keychain; unlock the login Keychain and try again")
-			}
-		}
-	} else {
-		path := filepath.Join(dataDir, "device-id")
-		b, err := os.ReadFile(path)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return "", err
-		}
-		seed = strings.TrimSpace(string(b))
-		if seed == "" {
-			seed = newUUID()
-			if err := atomicWrite(path, []byte(seed)); err != nil {
-				return "", err
-			}
-		}
-	}
-	digest := sha256.Sum256([]byte("chaos.device.v1" + seed))
-	return hex.EncodeToString(digest[:]), nil
 }
 
 func newUUID() string {

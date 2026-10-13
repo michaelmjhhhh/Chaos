@@ -22,12 +22,12 @@ type Effects struct {
 }
 
 type Options struct {
-	DataDir, Home, DeviceHash string
-	Processor                 *core.Processor
-	Client                    *core.Client
-	Effects                   Effects
-	Now                       func() time.Time
-	WatchInterval             time.Duration
+	DataDir, Home string
+	Processor     *core.Processor
+	Client        *core.Client
+	Effects       Effects
+	Now           func() time.Time
+	WatchInterval time.Duration
 	// Tests and explicit --data-dir sessions never read real user preferences.
 	ImportLegacyPreferences bool
 }
@@ -59,13 +59,12 @@ type Controller struct {
 	processor                        *core.Processor
 	client                           *core.Client
 	effects                          Effects
-	home, deviceHash, dataDir        string
+	home, dataDir                    string
 	now                              func() time.Time
 	watchInterval                    time.Duration
 	wantWatching                     bool
 	configEdited                     bool
 	settingsRevision, healthRevision uint64
-	usageRevision                    uint64
 	closeErr                         error
 	prefs                            Preferences
 	refreshMu                        sync.Mutex
@@ -114,8 +113,8 @@ func New(opts Options) (*Controller, error) {
 		return nil, fmt.Errorf("open screenshot history: %w", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &Controller{ctx: ctx, cancel: cancel, closed: make(chan struct{}), wake: make(chan struct{}, 1), saveWake: make(chan struct{}, 1), pending: make(map[string]bool), store: db, processor: opts.Processor, client: opts.Client, effects: opts.Effects, home: opts.Home, deviceHash: opts.DeviceHash, dataDir: opts.DataDir, now: opts.Now, watchInterval: opts.WatchInterval, prefs: prefs}
-	r := cfg.Resolve(opts.Home, opts.DeviceHash)
+	c := &Controller{ctx: ctx, cancel: cancel, closed: make(chan struct{}), wake: make(chan struct{}, 1), saveWake: make(chan struct{}, 1), pending: make(map[string]bool), store: db, processor: opts.Processor, client: opts.Client, effects: opts.Effects, home: opts.Home, dataDir: opts.DataDir, now: opts.Now, watchInterval: opts.WatchInterval, prefs: prefs}
+	r := cfg.Resolve(opts.Home)
 	c.snapshot = Snapshot{Config: cfg, APIStatus: "N/A", WatcherStatus: "Paused", StartedAt: opts.Now(), SessionNumber: prefs.SessionNumber, AutoStart: prefs.AutoStart, OnboardingComplete: prefs.OnboardingComplete, DataDir: opts.DataDir, ConfigPath: cfgPath, ResolvedWatchDir: r.WatchDir, ResolvedOutputDir: r.OutputDir}
 	if err := errors.Join(cfgErr, prefErr); err != nil {
 		c.snapshot.StorageError = err.Error()
@@ -180,20 +179,17 @@ func (c *Controller) SaveConfig(cfg core.Config) {
 		return
 	}
 	c.mu.Lock()
-	old := c.snapshot.Config.Resolve(c.home, c.deviceHash)
+	old := c.snapshot.Config.Resolve(c.home)
 	c.snapshot.Config = cloneConfig(cfg)
 	c.configEdited = true
-	r := cfg.Resolve(c.home, c.deviceHash)
+	r := cfg.Resolve(c.home)
 	c.snapshot.ResolvedWatchDir = r.WatchDir
 	c.snapshot.ResolvedOutputDir = r.OutputDir
 	c.settingsRevision++
 	if old.Provider.ID != r.Provider.ID || old.APIKey != r.APIKey || old.Model != r.Model || old.BaseURL != r.BaseURL {
 		c.snapshot.APIStatus = "N/A"
 		c.snapshot.HealthError = ""
-		c.snapshot.Usage = nil
-		c.snapshot.UsageError = ""
 		c.healthRevision++
-		c.usageRevision++
 	}
 	changedWatch := c.snapshot.Watching && old.WatchDir != r.WatchDir
 	c.mu.Unlock()
@@ -322,7 +318,7 @@ func (c *Controller) startWatcher() {
 		return
 	}
 	c.mu.Lock()
-	r := c.snapshot.Config.Resolve(c.home, c.deviceHash)
+	r := c.snapshot.Config.Resolve(c.home)
 	wanted := c.wantWatching
 	activeDir := c.snapshot.ActiveWatchDir
 	c.mu.Unlock()
@@ -575,68 +571,37 @@ func (c *Controller) run(fn func()) {
 	go func() { defer c.wg.Done(); fn() }()
 }
 
-func (c *Controller) CheckHealth() { c.run(func() { c.checkHealth(false) }) }
-func (c *Controller) CheckUsage()  { c.run(func() { c.checkHealth(true) }) }
+func (c *Controller) CheckHealth() { c.run(c.checkHealth) }
 
-func (c *Controller) checkHealth(usageOnly bool) {
+func (c *Controller) checkHealth() {
 	c.mu.Lock()
-	cfg := c.snapshot.Config.Resolve(c.home, c.deviceHash)
-	if usageOnly && cfg.Provider.ID != "chaos-hosted" {
-		c.mu.Unlock()
-		return
-	}
-	var rev uint64
-	if cfg.Provider.ID == "chaos-hosted" {
-		c.usageRevision++
-	}
-	usageRev := c.usageRevision
-	if usageOnly {
-		rev = c.usageRevision
-	} else {
-		c.healthRevision++
-		rev = c.healthRevision
-	}
+	cfg := c.snapshot.Config.Resolve(c.home)
+	c.healthRevision++
+	rev := c.healthRevision
 	c.mu.Unlock()
 	c.change(func(s *Snapshot) {
-		if (usageOnly && rev != c.usageRevision) || (!usageOnly && rev != c.healthRevision) {
+		if rev != c.healthRevision {
 			return
 		}
-		if usageOnly {
-			s.UsageError = ""
-		} else {
-			s.APIStatus = "Checking…"
-			s.HealthError = ""
-		}
+		s.APIStatus = "Checking…"
+		s.HealthError = ""
 	})
 	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()
-	var usage core.HostedUsage
-	var err error
-	if cfg.Provider.ID == "chaos-hosted" {
-		usage, err = c.client.Usage(ctx, cfg)
-	} else {
+	err := cfg.Validate()
+	if err == nil {
 		err = c.client.CheckHealth(ctx, cfg)
 	}
 	c.change(func(s *Snapshot) {
-		if (usageOnly && rev != c.usageRevision) || (!usageOnly && rev != c.healthRevision) {
+		if rev != c.healthRevision {
 			return
 		}
-		if cfg.Provider.ID == "chaos-hosted" && usageRev == c.usageRevision {
-			if err == nil {
-				s.Usage = &usage
-				s.UsageError = ""
-			} else {
-				s.UsageError = core.Friendly(err, cfg.Provider.ID).Message
-			}
-		}
-		if !usageOnly {
-			if err == nil {
-				s.APIStatus = "OK"
-				s.HealthError = ""
-			} else {
-				s.APIStatus = "FAIL"
-				s.HealthError = core.Friendly(err, cfg.Provider.ID).Message
-			}
+		if err == nil {
+			s.APIStatus = "OK"
+			s.HealthError = ""
+		} else {
+			s.APIStatus = "FAIL"
+			s.HealthError = core.Friendly(err, cfg.Provider.ID).Message
 		}
 	})
 }

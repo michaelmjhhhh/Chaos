@@ -21,19 +21,19 @@ WebView, or Swift application layer.
   rate, estimated time saved (30s per success), activity calendar, current/longest
   streak, peak hour, category and file-type breakdowns, average/p95 duration,
   fastest/slowest images and trailing twelve-week volume.
-- **Settings:** seven existing providers and their defaults; protected key input;
+- **Settings:** six supported providers and their defaults; protected key input;
   provider descriptions/signup links; model override; custom endpoint; connection
-  checks; hosted-trial allowance; native watch/output folder selection; English/
+  checks; native watch/output folder selection; English/
   Chinese filenames; tokenized filename template and live preview; none/day/month
   subfolders; custom prompt toggle/editor/default reset; image clipboard;
   start-on-launch; notifications; system/light/dark appearance; reveal config.
-- **Welcome:** introduction, optional provider/key connection, folder choice, final
+- **Welcome:** introduction, provider/key connection, folder choice, final
   start; Back/Continue/Skip; persistent completion; replay through Help.
 - **Help:** searchable FAQ with expandable answers and website link.
 - **Tray:** watcher state/control, latest five attempts, reveal file, output folder,
   Dashboard/Settings/Help, provider/model and Quit.
 - **Native integration:** file and directory dialogs, Finder reveal, image opening,
-  image pasteboard, success sound, opt-in notifications, device identity, desktop
+  image pasteboard, success sound, opt-in notifications, desktop
   appearance, VoiceOver labels/announcements and reduced-motion preferences.
 
 ## Persistence contracts
@@ -51,9 +51,9 @@ WebView, or Swift application layer.
   capped at 500. SQLite timestamps are UTC text; displayed calendar math is local.
 - Legacy `history.json` uses Swift Date's 2001 epoch and synthesized result enums.
   Import transactionally and archive `.migrated` only after successful decoding.
-- Hosted device identity remains SHA256 of `chaos.device.v1` plus exact hardware
-  UUID string; preserve fallback Keychain service `com.chaos.app.device`, account
-  `device-seed`. A new UI must not reset existing trial identity.
+- The hosted trial and its device identity collection have been retired. Migrate
+  saved trial selections to the default provider with no active key or model override,
+  while retaining other provider keys and filing settings.
 
 ## Defects identified in the old implementation
 
@@ -86,7 +86,7 @@ validated separately from the headless view tests.
 
 ## Review scenarios
 
-1. Open existing config/SQLite/legacy JSON; retain history, settings and trial ID.
+1. Open existing config/SQLite/legacy JSON; retain history and settings; migrate retired provider.
 2. Watch a new screenshot; manually select/drop each supported format; mixed batch.
 3. Fail a request, repair provider, retry one/all; reject missing source gracefully.
 4. Rename with collision then undo; never overwrite either existing file.

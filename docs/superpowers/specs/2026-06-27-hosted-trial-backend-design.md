@@ -1,5 +1,11 @@
 # Hosted Free-Trial Naming Backend (Agnes AI) — Design
 
+> Historical record: the Agnes AI hosted trial, device identity collection and
+> Vercel build configuration have since been removed. Automatic Git deployments
+> are disabled in `vercel.json`. Hosted behavior below
+> is no longer a compatibility requirement.
+
+
 **Date:** 2026-06-27
 **Status:** Implemented (app + proxy code); pending provisioning & deploy.
 

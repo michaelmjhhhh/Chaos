@@ -30,7 +30,6 @@ func (f *testController) RetryAll()              { f.calls = append(f.calls, "re
 func (f *testController) Rename(id, name string) { f.calls = append(f.calls, "rename:"+id+":"+name) }
 func (f *testController) Revert(id string)       { f.calls = append(f.calls, "revert:"+id) }
 func (f *testController) CheckHealth()           { f.calls = append(f.calls, "health") }
-func (f *testController) CheckUsage()            { f.calls = append(f.calls, "usage") }
 func (f *testController) CompleteOnboarding(start bool) {
 	if start {
 		f.calls = append(f.calls, "onboard-start")
@@ -190,6 +189,9 @@ func TestProviderSwitchAndProtectedKey(t *testing.T) {
 	d.SelectTab("Settings")
 	tt := ui.NewTester(d.View, 1000, 1800)
 	click(t, tt, "Provider")
+	if tt.HasText("Chaos (recommended)") {
+		t.Fatal("retired provider is still selectable")
+	}
 	click(t, tt, "OpenAI")
 	if ctl.saved.Provider != "openai" {
 		t.Fatalf("provider=%q", ctl.saved.Provider)
@@ -212,6 +214,31 @@ func TestProviderSwitchAndProtectedKey(t *testing.T) {
 		t.Fatal("custom endpoint must be visible immediately")
 	}
 }
+func TestWelcomeRequiresProviderSetup(t *testing.T) {
+	d, _ := fixture()
+	d.config = core.Config{}
+	d.ShowWelcome()
+	tt := ui.NewTester(d.View, 1000, 1200)
+	click(t, tt, "Continue")
+	if !tt.HasText("Turn on naming.") || !tt.HasText("API Key") || tt.HasText("Check free trial") {
+		t.Fatal("welcome must show provider setup without trial controls")
+	}
+	// A disabled button may reject clicks; either way it must not advance.
+	_ = tt.Click("Continue")
+	if d.welcomeStep != 1 {
+		t.Fatal("remote provider advanced without a key")
+	}
+	click(t, tt, "API Key")
+	tt.Type("test-key")
+	click(t, tt, "Continue")
+	if !tt.HasText("Your tidy folder.") {
+		t.Fatal("configured provider could not advance")
+	}
+	click(t, tt, "Back")
+	if !tt.HasText("Turn on naming.") {
+		t.Fatal("back navigation skipped provider setup")
+	}
+}
 func TestHelpSearchAndWelcome(t *testing.T) {
 	d, ctl := fixture()
 	d.ShowHelp()
@@ -231,8 +258,12 @@ func TestHelpSearchAndWelcome(t *testing.T) {
 		t.Fatal("welcome missing")
 	}
 	click(t, tt, "Continue")
+	if !tt.HasText("Turn on naming.") {
+		t.Fatal("provider setup step missing")
+	}
+	click(t, tt, "Continue")
 	if !tt.HasText("Your tidy folder.") {
-		t.Fatal("configured hosted provider should skip connect step")
+		t.Fatal("folder step missing")
 	}
 	click(t, tt, "Continue")
 	click(t, tt, "Start Watching")

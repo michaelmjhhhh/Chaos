@@ -25,7 +25,6 @@ type Controller interface {
 	Rename(string, string)
 	Revert(string)
 	CheckHealth()
-	CheckUsage()
 	CompleteOnboarding(bool)
 	SaveConfig(core.Config)
 	DismissError()

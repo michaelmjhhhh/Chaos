@@ -1,7 +1,6 @@
 package desktop
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -90,9 +89,6 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 		if provider.ID == "ollama" {
 			kind = "Local"
 		}
-		if provider.ID == "chaos-hosted" {
-			kind = "Built-in"
-		}
 		small(c, kind)
 		if provider.RequiresKey {
 			ui.Field(c, "API Key", func() {
@@ -155,23 +151,6 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 			small(c, "Private: naming runs on your Mac. Install Ollama separately, then run: ollama pull qwen3-vl:2b")
 		} else {
 			small(c, "Each image is sent to "+provider.Name+" to generate its name.")
-		}
-		if provider.ID == "chaos-hosted" {
-			ui.Button(c, "Check free trial").OnClick(func() {
-				if d.controller != nil {
-					d.controller.CheckUsage()
-				}
-			})
-			if usage := d.snapshot.Usage; usage != nil {
-				text := fmt.Sprintf("You've used %d of %d free names — %d left.", usage.Used, usage.Limit, usage.Remaining)
-				if usage.Remaining <= 0 {
-					text = "You've used all your free names. Choose another provider and add your own key to continue."
-				}
-				ui.Text(c, text).Selectable()
-			}
-			if d.snapshot.UsageError != "" {
-				ui.Text(c, d.snapshot.UsageError).TextColor(c.Theme().Danger)
-			}
 		}
 	})
 }

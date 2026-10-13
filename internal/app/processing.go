@@ -15,7 +15,7 @@ import (
 func (c *Controller) process(ctx context.Context, j job) {
 	start := c.now()
 	c.mu.Lock()
-	cfg := c.snapshot.Config.Resolve(c.home, c.deviceHash)
+	cfg := c.snapshot.Config.Resolve(c.home)
 	c.mu.Unlock()
 	c.change(func(s *Snapshot) {
 		s.Busy = true

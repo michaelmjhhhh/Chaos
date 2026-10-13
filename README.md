@@ -106,7 +106,6 @@ Chaos speaks the OpenAI-compatible vision API format, so you can choose the serv
 
 | Provider | Default model | Base URL |
 | --- | --- | --- |
-| **Chaos (recommended)** | Managed trial model | Built-in hosted service; no setup required |
 | **SiliconRouter** | `gemini-3-flash-preview` | `https://api.siliconrouter.com/v1` |
 | **OpenAI** | `gpt-4o-mini` | `https://api.openai.com/v1` |
 | **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
@@ -160,17 +159,14 @@ native Go UI: no web frontend, JavaScript runtime, Swift application code, or cg
 
 ```bash
 make dev                       # MyGo native live development
-make test                      # services, controller, hosted API and native UI tests
+make test                      # services, controller and native UI tests
 make race                      # concurrency checks
 make vet                       # static analysis
 ./package-dmg.sh               # signed .build/Chaos.dmg
 go run ./cmd/chaos --data-dir /tmp/chaos-preview  # isolated manual QA profile
 ```
 
-The isolated profile does not import your settings, access your device identity,
-or alter your existing history. The optional hosted proxy is also Go; its local
-server and Vercel deployment instructions are in [hosted/README.md](hosted/README.md).
-The Vercel project now builds from the repository root, not `hosted/`.
+The isolated profile does not import your settings or alter your existing history.
 
 The source also builds for Linux and Windows. macOS remains the primary tested
 desktop; HEIC conversion uses the built-in macOS image service. See the
@@ -189,9 +185,15 @@ Chaos stores its configuration at:
 On first launch, Chaos imports an existing `vibe-shot` CLI configuration when one is available.
 
 Existing Swift installations keep the same configuration, SQLite history, bundle
-identifier and hosted-trial identity. Legacy `history.json` is imported with its
+identifier. Legacy `history.json` is imported with its
 original timestamps and archived only after a successful transaction. UserDefaults
 for onboarding, session number and start-on-launch are imported to `preferences.json`.
+
+The former Chaos hosted trial has been removed. Saved trial selections reset to
+SiliconRouter with an empty API key and default model. Choose a provider and enter
+your own key, or select local Ollama, before processing images. Other saved provider
+keys and filing settings are preserved. The hosted backend has been removed;
+`vercel.json` now disables automatic Git deployments.
 
 File changes are journaled under `pending/` and reconciled on launch after a crash.
 API keys are stored in the local configuration with owner-only permissions; switching

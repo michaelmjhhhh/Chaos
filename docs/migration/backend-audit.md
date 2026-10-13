@@ -1,5 +1,11 @@
 # Backend migration audit
 
+> Historical record: the Agnes AI hosted trial, device identity collection and
+> Vercel build configuration have since been removed. Automatic Git deployments
+> are disabled in `vercel.json`. Hosted behavior below
+> is no longer a compatibility requirement.
+
+
 Audit baseline: the original Swift/SwiftUI application and TypeScript hosted functions in this repository. The Go implementation is under `internal/core`; orchestration and native platform services are separate packages. This document records behavior and compatibility requirements, not an alternative implementation plan.
 
 ## Existing product behavior

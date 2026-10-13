@@ -20,10 +20,6 @@ to release a fix before any public disclosure.
 
 ## Scope notes
 
-- **Hosted free-trial proxy** (`hosted/`): the app token bundled in the client is
-  intentionally public and is only a light gate. Real protection is server-side
-  per-device and global usage limits plus per-call cost ceilings. Trial-abuse
-  reports are welcome, but the bundled token being readable is by design.
 - **Local app**: Chaos reads images from a watched folder and writes renamed
   copies to your chosen output folder. It sends image data only to the vision
   provider you configure.

@@ -2,9 +2,6 @@ package app
 
 import (
 	"bytes"
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"image"
@@ -15,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -50,7 +46,7 @@ func testController(t *testing.T, handler http.HandlerFunc, effects Effects) (*C
 	if err := core.SaveConfig(filepath.Join(dir, "config.json"), cfg); err != nil {
 		t.Fatal(err)
 	}
-	c, err := New(Options{DataDir: dir, Home: dir, Client: &core.Client{HTTP: testHTTPClient{client: server.Client(), t: t}}, Effects: effects, WatchInterval: 10 * time.Millisecond, DeviceHash: strings.Repeat("a", 64)})
+	c, err := New(Options{DataDir: dir, Home: dir, Client: &core.Client{HTTP: testHTTPClient{client: server.Client(), t: t}}, Effects: effects, WatchInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +117,7 @@ func TestFilingRenameReopenAndRevertPreserveBytes(t *testing.T) {
 	if err := c.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := New(Options{DataDir: c.dataDir, Home: c.home, DeviceHash: c.deviceHash})
+	reopened, err := New(Options{DataDir: c.dataDir, Home: c.home})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,16 +347,6 @@ func TestUndoWhileWatchingThroughSymlinkDoesNotRefile(t *testing.T) {
 	}
 }
 
-func TestCheckUsageDoesNotInvalidateNonHostedHealth(t *testing.T) {
-	started, release := make(chan struct{}), make(chan struct{})
-	c, _ := testController(t, func(w http.ResponseWriter, r *http.Request) { close(started); <-release; successHandler(w, r) }, Effects{})
-	c.CheckHealth()
-	<-started
-	c.CheckUsage()
-	close(release)
-	eventually(t, "health completes despite unrelated usage action", func() bool { return c.Snapshot().APIStatus == "OK" })
-}
-
 func TestCorruptConfigIsNotOverwrittenByPreferenceChange(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
@@ -380,35 +366,6 @@ func TestCorruptConfigIsNotOverwrittenByPreferenceChange(t *testing.T) {
 	b, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(b, corrupt) {
 		t.Fatal("corrupt config overwritten", err)
-	}
-}
-
-func TestDeviceIdentityMatchesSwiftAndUsesExactKeychainFallback(t *testing.T) {
-	for _, keychain := range []bool{false, true} {
-		t.Run(map[bool]string{false: "hardware", true: "keychain"}[keychain], func(t *testing.T) {
-			seed := "0123ABCD-5678-4000-ABCD-123456789ABC"
-			run := func(ctx context.Context, name string, args ...string) ([]byte, error) {
-				if name == "/usr/sbin/ioreg" {
-					if keychain {
-						return nil, errors.New("unavailable")
-					}
-					return []byte(`"IOPlatformUUID" = "` + seed + `"`), nil
-				}
-				if name == "/usr/bin/security" && strings.Join(args, " ") == "find-generic-password -s com.chaos.app.device -a device-seed -w" {
-					return []byte(seed + "\n"), nil
-				}
-				t.Fatalf("unexpected native call: %s %v", name, args)
-				return nil, nil
-			}
-			got, err := deviceHash(t.TempDir(), "darwin", run)
-			if err != nil {
-				t.Fatal(err)
-			}
-			want := sha256.Sum256([]byte("chaos.device.v1" + seed))
-			if got != hex.EncodeToString(want[:]) {
-				t.Fatal("existing trial identity changed")
-			}
-		})
 	}
 }
 

@@ -43,28 +43,16 @@ func main() {
 	}
 	mygo.App.SetName("Chaos")
 	if customDir {
-		// QA profiles neither access the user's Keychain nor attach to a
-		// running production instance's single-instance socket.
+		// QA profiles use a separate single-instance socket from production.
 		sum := sha256.Sum256([]byte(absDir))
 		mygo.App.SetName("Chaos Preview " + hex.EncodeToString(sum[:4]))
 	}
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	var identity string
-	var identityErr error
-	if customDir {
-		sum := sha256.Sum256([]byte(absDir))
-		identity = hex.EncodeToString(sum[:])
-	} else {
-		identity, identityErr = app.DeviceHash(absDir)
-	}
-	controller, err := app.New(app.Options{DataDir: absDir, DeviceHash: identity, ImportLegacyPreferences: !customDir, Effects: app.Effects{CopyImage: copyImage, Sound: playSound, Notify: notify}})
+	controller, err := app.New(app.Options{DataDir: absDir, ImportLegacyPreferences: !customDir, Effects: app.Effects{CopyImage: copyImage, Sound: playSound, Notify: notify}})
 	if err != nil {
 		log.Fatal(err)
-	}
-	if identityErr != nil {
-		controller.ReportWarning(identityErr.Error())
 	}
 	runDesktop(controller, flag.Args())
 }

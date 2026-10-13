@@ -82,7 +82,6 @@ Sources: [view contracts](https://github.com/egoist/mygo/blob/bc111b6d2cca221716
 | Tray/menu bar | `NewTray`, `OnClick`, `OnRightClick`, `SetMenu` | Primary click with an attached macOS menu opens that menu. |
 | Completion sound | `audio` Go package; platform sound compatibility separately | Decode/play WAV or synthesized samples; output failure is observable. |
 | Persistent settings/history | Application Go packages | MyGo supplies paths, not a database or migration policy. |
-| Stable device identity/key storage | Application platform adapter | MyGo does not provide Keychain or hardware identity APIs. |
 
 Sources: [desktop APIs](https://github.com/egoist/mygo/blob/bc111b6d2cca221716ad99ddea1580449ad8c18e/docs/native.md),
 [login source](https://github.com/egoist/mygo/blob/bc111b6d2cca221716ad99ddea1580449ad8c18e/login.go),
@@ -172,12 +171,8 @@ tractable; successful compilation alone is insufficient evidence of parity.
   remove OS ABI, GPU-driver or desktop-library risks. Native libraries still
   require real platform QA.
 
-## Hosted backend is independent of the desktop framework
+## Hosted backend retired
 
-The hosted trial service uses `net/http` and Redis REST, without MyGo or a
-JavaScript SDK. The [official Vercel Go runtime documentation](https://vercel.com/docs/functions/runtimes/go)
-and Context7's Vercel documentation confirm a root `go.mod`, Go framework preset,
-custom build command and `PORT` listener. Vercel downloads the selected Go
-toolchain. Its Go runtime is marked beta; deployment compatibility is documented
-but requires a preview build before production rollout. No production deployment
-is part of this migration.
+The Agnes AI trial backend and Vercel build configuration have been removed.
+The remaining `vercel.json` disables automatic Git deployments. The desktop
+connects directly to the user's selected provider.

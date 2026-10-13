@@ -2,7 +2,6 @@
 
 build:
 	CGO_ENABLED=0 go build -trimpath -tags mygo_noinspector -o .build/Chaos ./cmd/chaos
-	CGO_ENABLED=0 go build -trimpath -o .build/chaos-hosted ./cmd/chaos-hosted
 
 test:
 	go test ./...

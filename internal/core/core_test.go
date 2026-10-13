@@ -47,7 +47,7 @@ func sampleImage(t *testing.T, path string, width, height int) {
 }
 func testConfig(base, out string) ResolvedConfig {
 	c := Config{Provider: "openai-compatible", APIKey: "unit-key", BaseURL: base, WatchDir: filepath.Dir(out), OutputDir: out, Model: "test-model"}
-	return c.Resolve(filepath.Dir(out), "device")
+	return c.Resolve(filepath.Dir(out))
 }
 
 func TestConfigLegacyMigrationAndCredentialIsolation(t *testing.T) {
@@ -58,7 +58,7 @@ func TestConfigLegacyMigrationAndCredentialIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Resolve(dir, "hash").CustomPrompt != "Custom" {
+	if cfg.Resolve(dir).CustomPrompt != "Custom" {
 		t.Fatal("custom prompt not retained")
 	}
 	cfg.SetProvider("openrouter")
@@ -91,17 +91,14 @@ func TestConfigLegacyMigrationAndCredentialIsolation(t *testing.T) {
 	}
 }
 func TestProviderResolution(t *testing.T) {
-	if len(Providers()) != 7 {
+	if len(Providers()) != 6 {
 		t.Fatal("provider missing")
 	}
 	for _, p := range Providers() {
 		cfg := Config{Provider: p.ID, APIKey: "key", BaseURL: "https://custom.example/v1"}
-		r := cfg.Resolve("/home/example", "abc")
+		r := cfg.Resolve("/home/example")
 		if r.Provider.ID != p.ID || r.Model != p.Model {
 			t.Fatalf("bad defaults %s", p.ID)
-		}
-		if p.ID == "chaos-hosted" && r.APIKey != HostedAppToken+":abc" {
-			t.Fatal("hosted device auth changed")
 		}
 		if p.ID == "ollama" && r.APIKey != "" {
 			t.Fatal("ollama received secret")
@@ -118,6 +115,68 @@ func TestProviderResolution(t *testing.T) {
 	c.SetProvider("ollama")
 	if c.Model != "" || c.BaseURL != "" {
 		t.Fatal("overrides not cleared")
+	}
+}
+
+func TestRetiredProviderMigration(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		t.Run(fmt.Sprint("legacy=", legacy), func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.json")
+			source, legacyPath := path, ""
+			if legacy {
+				legacyPath = filepath.Join(dir, "legacy.json")
+				source = legacyPath
+			}
+			original := []byte(`{"provider":"chaos-hosted","api_key":"retired-key","model":"agnes-2.0-flash","base_url":"https://retired.invalid/api","provider_keys":{"chaos-hosted":"retired-key","openai":"saved-key"},"watch_dir":"/screenshots","language":"zh"}`)
+			writeTestFile(t, source, original)
+			cfg, err := LoadConfig(path, legacyPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Provider != "siliconrouter" || cfg.APIKey != "" || cfg.Model != "" || cfg.BaseURL != "" {
+				t.Fatalf("retired provider settings carried over: %+v", cfg)
+			}
+			if cfg.WatchDir != "/screenshots" || cfg.Language != "zh" || cfg.ProviderKeys["openai"] != "saved-key" {
+				t.Fatal("unrelated settings lost")
+			}
+			if _, ok := cfg.ProviderKeys["chaos-hosted"]; ok {
+				t.Fatal("retired credentials retained")
+			}
+			if err := cfg.Resolve(dir).Validate(); err == nil {
+				t.Fatal("retired provider should require setup")
+			}
+			preserved, _ := os.ReadFile(source)
+			if !bytes.Equal(preserved, original) {
+				t.Fatal("loading rewrote source config")
+			}
+			if err := SaveConfig(path, cfg); err != nil {
+				t.Fatal(err)
+			}
+			reloaded, err := LoadConfig(path, "")
+			if err != nil || !reflect.DeepEqual(cfg, reloaded) {
+				t.Fatal("migration did not survive save/reload", err)
+			}
+			cfg.SetProvider("openai")
+			if cfg.APIKey != "saved-key" {
+				t.Fatal("saved provider credential not restored")
+			}
+		})
+	}
+	for _, provider := range Providers() {
+		if provider.ID == "chaos-hosted" || strings.Contains(provider.Model, "agnes") || strings.Contains(provider.BaseURL, "vercel") {
+			t.Fatal("retired service is still selectable")
+		}
+	}
+	// In-memory configurations must be safe even before they have been saved.
+	cfg := Config{Provider: "chaos-hosted", APIKey: "retired-key", Model: "agnes-2.0-flash", ProviderKeys: map[string]string{"openai": "saved-key"}}
+	resolved := cfg.Resolve(t.TempDir())
+	if resolved.Model != ProviderByID("siliconrouter").Model || resolved.APIKey != "" {
+		t.Fatal("resolution carried retired model or credentials to new provider")
+	}
+	cfg.SetProvider("openai")
+	if cfg.APIKey != "saved-key" || cfg.ProviderKeys["siliconrouter"] != "" {
+		t.Fatal("retired credential crossed provider boundary")
 	}
 }
 func TestNamingSafetyAndTokens(t *testing.T) {
@@ -276,7 +335,7 @@ func TestImagePreparationAndOrientation(t *testing.T) {
 		t.Fatal("EXIF pixel mapping wrong")
 	}
 }
-func TestClientPayloadParsingAndHostedHealth(t *testing.T) {
+func TestClientPayloadParsingAndHealth(t *testing.T) {
 	var mu sync.Mutex
 	var paths []string
 	var body map[string]any
@@ -286,10 +345,6 @@ func TestClientPayloadParsingAndHostedHealth(t *testing.T) {
 		paths = append(paths, r.URL.Path)
 		if r.Header.Get("Authorization") != "Bearer unit-key" {
 			t.Error("missing credentials")
-		}
-		if r.URL.Path == "/api/usage" {
-			fmt.Fprint(w, `{"used":3,"limit":20,"remaining":17}`)
-			return
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Error(err)
@@ -316,14 +371,13 @@ func TestClientPayloadParsingAndHostedHealth(t *testing.T) {
 	if body["max_tokens"] != float64(32) || body["stream"] != false {
 		t.Fatal("request limits changed")
 	}
-	cfg.Provider = ProviderByID("chaos-hosted")
 	if err = client.CheckHealth(context.Background(), cfg); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if !reflect.DeepEqual(paths, []string{"/api/chat/completions", "/api/usage"}) {
-		t.Fatal("health consumed naming quota", paths)
+	if !reflect.DeepEqual(paths, []string{"/api/chat/completions", "/api/chat/completions"}) {
+		t.Fatal("unexpected provider endpoints", paths)
 	}
 	for _, input := range []string{`{"choices":[{"message":{"content":[{"type":"text","text":"array-name"}]}}]}`, `{"candidates":[{"content":{"parts":[{"text":"gemini-name"}]}}]}`} {
 		if value, err := ParseSlug([]byte(input)); err != nil || value == "" {
@@ -342,12 +396,12 @@ func TestFriendlyDistinguishesFilesystemAndNetworkErrors(t *testing.T) {
 		name, provider, action, detail string
 		err                            error
 	}{
-		{"file permission", "chaos-hosted", "retry", "permission denied", &os.PathError{Op: "open", Path: "/images/source.png", Err: os.ErrPermission}},
+		{"file permission", "openai", "retry", "permission denied", &os.PathError{Op: "open", Path: "/images/source.png", Err: os.ErrPermission}},
 		{"missing file with Ollama", "ollama", "retry", "file does not exist", &os.PathError{Op: "stat", Path: "/images/missing.png", Err: os.ErrNotExist}},
-		{"file publication", "chaos-hosted", "retry", "permission denied", &os.LinkError{Op: "link", Old: "/images/source.png", New: "/images/out.png", Err: syscall.EACCES}},
-		{"network connection", "chaos-hosted", "internet", "internet", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}},
+		{"file publication", "openai", "retry", "permission denied", &os.LinkError{Op: "link", Old: "/images/source.png", New: "/images/out.png", Err: syscall.EACCES}},
+		{"network connection", "openai", "internet", "internet", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}},
 		{"local model connection", "ollama", "settings", "Ollama", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}},
-		{"network timeout", "chaos-hosted", "retry", "too long", &net.DNSError{Err: "timeout", IsTimeout: true}},
+		{"network timeout", "openai", "retry", "too long", &net.DNSError{Err: "timeout", IsTimeout: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Request wrappers must not leak credentials, including when they
@@ -382,11 +436,11 @@ func TestProviderErrorsAndCancellation(t *testing.T) {
 			if !errors.As(err, &httpErr) || httpErr.Status != status {
 				t.Fatal(err)
 			}
-			friendly := Friendly(err, "chaos-hosted")
+			friendly := Friendly(err, "openai")
 			if friendly.Message == "" || friendly.Action == "" {
 				t.Fatal("missing recovery")
 			}
-			if status == 402 && !strings.Contains(friendly.Message, "free") {
+			if status == 402 && !strings.Contains(friendly.Message, "credit") {
 				t.Fatal(friendly)
 			}
 		})
@@ -468,11 +522,6 @@ func TestNoHardlinkFallbackDoesNotOverwrite(t *testing.T) {
 	contents, _ := os.ReadFile(target)
 	if string(contents) != "source" {
 		t.Fatal(string(contents))
-	}
-}
-func TestHostedMissingIdentityValidation(t *testing.T) {
-	if err := (Config{Provider: "chaos-hosted"}).Resolve("/home", "").Validate(); err == nil {
-		t.Fatal("hosted empty identity accepted")
 	}
 }
 

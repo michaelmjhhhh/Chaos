@@ -17,13 +17,6 @@ type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 type Client struct{ HTTP HTTPDoer }
-type HostedUsage struct {
-	Used        int `json:"used"`
-	Limit       int `json:"limit"`
-	Remaining   int `json:"remaining"`
-	GlobalSpent int `json:"globalSpent"`
-	GlobalLimit int `json:"globalLimit"`
-}
 type HTTPError struct {
 	Status  int
 	Message string
@@ -95,32 +88,7 @@ func (c *Client) GenerateSlug(ctx context.Context, image PreparedImage, cfg Reso
 	}
 	return ParseSlug(data)
 }
-func (c *Client) Usage(ctx context.Context, cfg ResolvedConfig) (HostedUsage, error) {
-	address, err := endpoint(cfg.BaseURL, "usage")
-	if err != nil {
-		return HostedUsage{}, err
-	}
-	data, err := c.do(ctx, http.MethodGet, address, cfg.APIKey, nil, 15*time.Second)
-	if err != nil {
-		return HostedUsage{}, err
-	}
-	var result struct {
-		Used, Limit, Remaining   *int
-		GlobalSpent, GlobalLimit int
-	}
-	if err = json.Unmarshal(data, &result); err != nil {
-		return HostedUsage{}, err
-	}
-	if result.Used == nil || result.Limit == nil || result.Remaining == nil || *result.Used < 0 || *result.Limit < 0 || *result.Remaining < 0 || *result.Remaining > *result.Limit {
-		return HostedUsage{}, errors.New("invalid usage response")
-	}
-	return HostedUsage{Used: *result.Used, Limit: *result.Limit, Remaining: *result.Remaining, GlobalSpent: result.GlobalSpent, GlobalLimit: result.GlobalLimit}, nil
-}
 func (c *Client) CheckHealth(ctx context.Context, cfg ResolvedConfig) error {
-	if cfg.Provider.ID == "chaos-hosted" {
-		_, err := c.Usage(ctx, cfg)
-		return err
-	}
 	address, err := endpoint(cfg.BaseURL, "chat/completions")
 	if err != nil {
 		return err
@@ -204,9 +172,6 @@ func Friendly(err error, provider string) FriendlyError {
 		case 401, 403:
 			return FriendlyError{"Your API key doesn't look right. Open Settings to re-enter it.", "settings"}
 		case 402:
-			if provider == "chaos-hosted" {
-				return FriendlyError{"You've used all your free names. Add your own provider key in Settings to keep going.", "settings"}
-			}
 			return FriendlyError{"Your provider account is out of credit. Add funds, or switch provider in Settings.", "settings"}
 		case 404:
 			return FriendlyError{"That model wasn't found. Check the model name in Settings.", "settings"}
