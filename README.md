@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Chaos/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128@2x.png" width="92" alt="Chaos app icon">
+  <img src="resources/icon.png" width="92" alt="Chaos app icon">
 </p>
 
 <h1 align="center">Chaos</h1>
@@ -16,7 +16,8 @@
 <p align="center">
   <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple_Silicon-native-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
-  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6.0-F05138?style=flat-square&amp;logo=swift&amp;logoColor=white">
+  <img alt="Go 1.27.2" src="https://img.shields.io/badge/Go-1.27.2-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white">
+  <img alt="MyGo native UI" src="https://img.shields.io/badge/MyGo-native_UI-111111?style=flat-square">
 </p>
 
 <p align="center">
@@ -32,6 +33,9 @@
 <p align="center">
   <strong><a href="docs/demo.mp4">Watch the 29-second demo →</a></strong>
 </p>
+
+The recording shows the previous Swift release; this branch implements the same
+workflow with MyGo's native Go UI. Build from source to try the migrated app.
 
 ## Your screenshots should not become a second inbox
 
@@ -88,11 +92,13 @@ Need to clean up an existing image? Drop a PNG, JPEG, HEIC, or WebP onto the das
 | **AI-generated names** | Files you can recognize in Finder and find with Spotlight |
 | **Filename templates** | A consistent format using `{slug}`, `{date}`, and `{time}` |
 | **Automatic organization** | Optional day or month folders without manual sorting |
-| **Local history** | The latest 500 attempts, searchable across launches |
+| **Local history** | Unlimited durable history, with the latest 500 attempts searchable in Pipeline |
 | **Retry flow** | A quick way to reprocess failed images after fixing a provider or file issue |
+| **Rename and undo** | Correct an AI name, or restore its original location without overwriting files |
+| **Lifetime insights** | Activity calendar, streaks, categories, file types, performance and time saved |
 | **Clipboard handoff** | An option to copy the renamed image back to your clipboard |
 | **Screenshot guards** | Processing limited to new macOS screenshots when folder watching is active |
-| **Editorial dashboard** | Live progress, recent filings, latency, throughput, and success rate |
+| **Editorial dashboard** | Live progress, current-day filed/error counts, latency, and folder controls |
 
 ## Bring your preferred model
 
@@ -100,6 +106,7 @@ Chaos speaks the OpenAI-compatible vision API format, so you can choose the serv
 
 | Provider | Default model | Base URL |
 | --- | --- | --- |
+| **Chaos (recommended)** | Managed trial model | Built-in hosted service; no setup required |
 | **SiliconRouter** | `gemini-3-flash-preview` | `https://api.siliconrouter.com/v1` |
 | **OpenAI** | `gpt-4o-mini` | `https://api.openai.com/v1` |
 | **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
@@ -125,16 +132,16 @@ Select **Ollama** in Chaos Settings. No API key is required.
 New screenshot
       │
       ▼
-ScreenshotGuard ── rejects unrelated files
+Folder watcher ─── waits for stable new screenshots
       │
       ▼
-VisionAPIClient ── asks your configured model for a short description
+Go vision client ─ asks your configured model for a short description
       │
       ▼
-SlugSanitizer ─── makes the result filesystem-safe
+Slug sanitizer ── makes the result filesystem-safe
       │
       ▼
-FileRenamer ───── applies your template, avoids collisions, and files the image
+Durable journal ─ applies your template, files without overwriting, and records history
 ```
 
 Existing files in the watched directory are ignored. Chaos only processes screenshots created after the watcher starts. Images you explicitly drop onto the dashboard bypass the screenshot filename guard and enter the same naming pipeline.
@@ -142,12 +149,34 @@ Existing files in the watched directory are ignored. Chaos only processes screen
 ## Build from source
 
 ```bash
-swift build
+go test ./...
 ./build-app.sh
 open .build/Chaos.app
 ```
 
-Requires macOS 15 or later and Swift 6.0 or later.
+Requires macOS 15 or later and Go 1.27.2. Go downloads the pinned toolchain
+automatically. The app uses [MyGo 0.4.6](https://github.com/egoist/mygo/tree/v0.4.6)
+native Go UI: no web frontend, JavaScript runtime, Swift application code, or cgo.
+
+```bash
+make dev                       # MyGo native live development
+make test                      # services, controller, hosted API and native UI tests
+make race                      # concurrency checks
+make vet                       # static analysis
+./package-dmg.sh               # signed .build/Chaos.dmg
+go run ./cmd/chaos --data-dir /tmp/chaos-preview  # isolated manual QA profile
+```
+
+The isolated profile does not import your settings, access your device identity,
+or alter your existing history. The optional hosted proxy is also Go; its local
+server and Vercel deployment instructions are in [hosted/README.md](hosted/README.md).
+The Vercel project now builds from the repository root, not `hosted/`.
+
+The source also builds for Linux and Windows. macOS remains the primary tested
+desktop; HEIC conversion uses the built-in macOS image service. See the
+[framework audit](docs/migration/mygo-audit.md),
+[feature checklist](docs/migration/feature-parity.md), and
+[validation report](docs/migration/validation.md) for compatibility and test details.
 
 ## Configuration
 
@@ -158,6 +187,15 @@ Chaos stores its configuration at:
 ```
 
 On first launch, Chaos imports an existing `vibe-shot` CLI configuration when one is available.
+
+Existing Swift installations keep the same configuration, SQLite history, bundle
+identifier and hosted-trial identity. Legacy `history.json` is imported with its
+original timestamps and archived only after a successful transaction. UserDefaults
+for onboarding, session number and start-on-launch are imported to `preferences.json`.
+
+File changes are journaled under `pending/` and reconciled on launch after a crash.
+API keys are stored in the local configuration with owner-only permissions; switching
+providers keeps their keys separate. Processing is serialized and deduplicated.
 
 ## Security
 

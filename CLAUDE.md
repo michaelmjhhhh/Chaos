@@ -1,93 +1,89 @@
-# CLAUDE.md
+# Repository guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## What this is
-
-Chaos is a native macOS (15+, Apple Silicon, Swift 6) menu-bar app that watches a folder for
-new screenshots, asks an OpenAI-compatible vision model what each one shows, and renames/files
-it under a meaningful name. Built with Swift Package Manager — **there is no `.xcodeproj`**.
+Chaos is a native Go screenshot organizer. MyGo v0.4.6 renders the desktop with
+`ui.View`; there is no WebView, TypeScript frontend, Swift target, or cgo requirement
+for production builds. macOS 15+ is the primary supported desktop. The hosted
+trial API is a separate Go HTTP service. The application requires Go 1.27.2,
+including the October 2026 standard-library security fixes.
 
 ## Commands
 
-```bash
-swift build                      # compile (debug)
-swift test                       # run all tests (XCTest, target: ChaosTests)
-swift test --filter InsightsRepositoryTests          # one test class
-swift test --filter InsightsRepositoryTests/testPeakHour   # one test method
-
-./build-app.sh                   # build + assemble + ad-hoc sign .build/Chaos.app
-open .build/Chaos.app            # run the assembled app
-./package-dmg.sh                 # build the drag-to-install Chaos.dmg
-
-swiftformat --lint .             # format check (CI fails if anything is unformatted)
-swiftformat .                    # apply formatting
-swiftlint lint                   # lint (CI runs this non-strict; warnings are advisory)
+```sh
+go test ./...                         # core, controller, native views, hosted API
+go test -race -count=1 ./...           # concurrency and integration checks
+go vet ./...
+gofmt -w cmd internal
+make build                           # both production executables, cgo disabled
+make dev                             # pinned MyGo development runner
+./build-app.sh                       # sign .build/Chaos.app on macOS
+./package-dmg.sh                     # .build/Chaos.dmg
+open .build/Chaos.app --args --data-dir /tmp/chaos-preview
 ```
 
-CI (`.github/workflows/ci.yml`, macOS-15) runs `swift build`, `swift test`, **`swiftformat
---lint .`**, and `swiftlint lint` on every push to `main` and on PRs. The format check runs
-across the **whole repo** — run `swiftformat .` before committing or CI's lint job will fail
-even when your own files are clean. Tagging `v*` triggers the release workflow, which builds
-and attaches the DMG.
+`--data-dir` isolates config, history, preferences and device identity, and avoids
+reading the production Keychain/UserDefaults. Give the preview a local/mock
+provider before processing fixtures. Never use a user's screenshot directories
+for automated tests. Hosted Lua integration tests run an ephemeral local Redis
+when `redis-server` is on PATH or `REDIS_SERVER_BIN` points to its executable;
+otherwise they explicitly skip. CI installs Redis on Linux.
 
-Note: tools are Swift 6 but both targets compile in **Swift 5 language mode**
-(`.swiftLanguageMode(.v5)` in `Package.swift`), so strict-concurrency violations surface as
-warnings, not errors.
+CI runs formatting, vet, race tests and production builds on macOS, Linux and
+Windows, plus cross-compilation. Native macOS packaging is checked separately.
+Tagging `v*` builds the DMG; it does not notarize the app or deploy the hosted API.
 
-## Architecture
+## Ownership and architecture
 
-**`AppState` (`Chaos/AppState.swift`) is the hub.** It's an `@Observable @MainActor` class
-created once in `ChaosApp` and injected via `.environment(appState)` into every scene (main
-window, `MenuBarExtra`, `Settings`). All views read it with `@Environment(AppState.self)`. It
-owns watcher lifecycle, the current processing stage, in-memory metrics, the loaded config, and
-the recent-files working set. Services are deliberately stateless/standalone; AppState wires
-them together. When changing behavior, the change usually lands here plus a focused service.
+- `internal/core`: provider/config resolution, image decoding/preparation, vision
+  requests, naming, watching, no-clobber file moves, SQLite and analytics.
+- `internal/app`: controller, serialized queue, watch lifecycle, immutable
+  snapshots, config/preference saves and durable file-operation journal.
+- `internal/desktop`: MyGo views for Dashboard, Pipeline, Insights, Settings,
+  Help, onboarding and tray. Views consume snapshots and call controller methods.
+- `cmd/chaos`: native windows, tray, menus, dialogs, pasteboard, notifications and
+  platform effects. Filesystem/image/network work stays off the UI thread.
+- `internal/hosted`, `cmd/chaos-hosted`: bounded HTTP proxy and atomic Redis quota
+  reservations/refunds. See `hosted/README.md` for deployment and billing policy.
 
-**Three surfaces, one state:** `ContentView` hosts a `TabView` with three tabs —
-`DashboardView` (live status + editorial layout), `PipelineView` (searchable history with
-retry/revert/rename), and `InsightsView` (all-time analytics). `MenuBarView` and `SettingsView`
-are separate scenes. To add a tab, extend `ContentView.AppTab` and add a `Tab(...)`.
+All MyGo view state and handles belong to the UI thread. Marshal asynchronous
+updates through `win.Update`; never retain a `ui.Element` beyond its build pass.
+Use `ui.Handle` for persistent view references. Dialogs run in goroutines. Headless
+view tests use MyGo's real `ui.NewTester`; native OS integrations still need a
+packaged-app check. Consult the pinned framework audit before upgrading MyGo.
 
-**Processing pipeline** (`Chaos/Services/FileProcessor.swift`, an `actor`): a
-`DirectoryWatcher` fires on new files → `ScreenshotGuard` rejects anything that isn't a fresh
-macOS screenshot (drag-dropped images bypass this guard but use the same pipeline) →
-`VisionImage` prepares base64 → `VisionAPIClient` calls the model → `SlugSanitizer` makes the
-result filesystem-safe → `NamingPolicy` applies the `{slug}/{date}/{time}` template and subfolder
-rule → `FileRenamer` moves the file, avoiding collisions. AppState records the outcome and
-publishes `ProcessingStage` updates for the UI. Batch/drag-drop and "retry all" funnel through
-`AppState.processBatch`, which guards against concurrent runs.
+The controller owns worker lifetimes and cancellation. It waits for them before
+closing SQLite. Watched/manual intake, retry and history mutations share one
+queue. Watcher reconciliation serializes Start/Stop/rebind intent. Health and
+usage responses carry independent freshness revisions. Snapshots deep-copy maps
+and slices before publication; UI callbacks reject out-of-order revisions.
 
-**Data & persistence — two stores, distinct roles:**
-- **`HistoryDatabase` (GRDB/SQLite) is the source of truth** for processed-image history, at
-  `~/Library/Application Support/chaos/history.sqlite`. It keeps the full lifetime of records
-  (no cap). `AppState` writes through it on `record`/`revert`/`rename` and loads the most-recent
-  500 into `recentFiles` for Dashboard/Pipeline. On first open it imports any legacy
-  `history.json` via `HistoryStore` and archives that file as `history.json.migrated`.
-  `HistoryStore` (JSON) now exists **only** for that one-time import.
-- **`InsightsRepository`** runs read-only `GROUP BY` aggregations over the same DB queue and
-  returns one `InsightsSnapshot` (all stats computed in a single read). `InsightsView` recomputes
-  when `AppState.historyRevision` bumps. SQLite date functions use the `'localtime'` modifier so
-  heatmap days / peak hour match the user's wall clock (GRDB stores dates as UTC text).
-- **`ConfigService`** persists `AppConfig` to `~/Library/Application Support/chaos/config.json`
-  (snake_case keys). AppState resolves config into effective values via its many `resolved*`
-  computed properties — prefer those over reading `config` fields directly.
+## Persistence and file safety
 
-**Provider abstraction:** `Provider` (`Chaos/Models/Provider.swift`) enumerates the supported
-OpenAI-compatible vision backends (OpenAI, DeepSeek, OpenRouter, SiliconRouter, Ollama, custom,
-and a bundled "Chaos Hosted" free-trial proxy). `VisionAPIClient` speaks the
-OpenAI chat-completions format to all of them.
+Keep bundle ID `com.chaos.app` and macOS data at
+`~/Library/Application Support/chaos/`. Existing `config.json` snake_case fields,
+`processed_images` camelCase SQLite columns and GRDB migration marker are compatibility
+contracts. Keep full history; only the UI working set is capped at 500. Store UTC
+timestamps and calculate calendar statistics in the local timezone. Legacy JSON
+uses Swift's 2001 date epoch; import transactionally and archive only after success.
+Import legacy UserDefaults once into `preferences.json`.
 
-**Domain model split:** `RecentFile` is the storage-agnostic domain type the UI uses;
-`ImageRecord` is its GRDB row mapping (with flattened `isError`/`errorMessage` and a cached `ext`
-column so analytics can aggregate in SQL without decoding the result enum). Keep the UI depending
-on `RecentFile`, not GRDB.
+Before publishing a file move, write a durable journal intent. Never overwrite
+an existing destination or remove a source that changed during processing. Bind
+analysis to the original file identity and content hash. Recovery checks content
+before completing history or unlinking a remaining source. Undo suppresses its
+restored path in the active watcher before publication. Clipboard/notification
+failures are warnings after a durable success, never failed filing records.
 
-## Design system
+Per-provider API keys must not leak to another provider or through HTTP redirects.
+Hosted request reservations enforce both device allowance and global cost budget
+atomically. Ambiguous upstream failures may have incurred cost: refund the device
+allowance but retain the global reservation. Do not expose admin secrets to desktop
+config or log request credentials/image payloads.
 
-All UI pulls from `Chaos/Views/Theme.swift` — an editorial/almanac aesthetic with adaptive
-light/dark color pairs (resolved via dynamic `NSColor`, so switching system appearance updates
-live), serif display faces, a coral brand accent, and spacing/radii scales. Reusable pieces live
-in `Chaos/Views/Editorial/` (`Masthead`, `EditorialRule`, `MetricFigure`, `Sparkline`, `Heatmap`,
-`BarBreakdown`, the `.card()` / `.sectionHead()` / `.smallCaps()` modifiers). Build new UI from
-these tokens and components rather than introducing ad-hoc colors, fonts, or one-off chrome.
+## Review references
+
+- [Framework and upstream audit](docs/migration/mygo-audit.md)
+- [Feature parity and compatibility contracts](docs/migration/feature-parity.md)
+- [Backend decisions](docs/migration/backend-audit.md)
+- [Validation and remaining platform limits](docs/migration/validation.md)
+
+`docs/superpowers/` records historical Swift designs, not current architecture.

@@ -30,8 +30,25 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Show toolchain
-        run: swift --version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Validate Go application
+        run: go test ./... && go vet ./...
+
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          with open('mygo.json') as f:
+              version = json.load(f)['version']
+          expected = 'v' + version
+          if os.environ['RELEASE_TAG'] != expected:
+              raise SystemExit(f"Release tag must match mygo.json version: {expected}")
+          PY
 
       - name: Build DMG
         run: ./package-dmg.sh
