@@ -37,13 +37,13 @@ func (c *Controller) process(ctx context.Context, j job) {
 		c.cancelled()
 		return
 	}
-	if plan.Record.ID == "" {
-		plan.Record.ID = newUUID()
+	record := core.RecentFile{
+		ID:           core.NewID(),
+		SourcePath:   j.path,
+		OriginalName: filepath.Base(j.path),
+		Timestamp:    c.now(),
 	}
-	plan.Record.SourcePath = j.path
-	plan.Record.OriginalName = filepath.Base(j.path)
-	plan.Record.Timestamp = c.now()
-	op := operation{Kind: "insert", Record: plan.Record, Source: j.path, SHA256: plan.SourceSHA256}
+	op := operation{Kind: "insert", Record: record, Source: j.path, SHA256: plan.SourceSHA256}
 	if err = plan.VerifySource(); err != nil {
 		c.failed(ctx, j, cfg, err)
 		return

@@ -88,7 +88,7 @@ func New(opts Options) (*Controller, error) {
 		opts.Client = &core.Client{}
 	}
 	if opts.Processor == nil {
-		opts.Processor = &core.Processor{Client: opts.Client}
+		opts.Processor = &core.Processor{Client: opts.Client, Now: opts.Now}
 	}
 	if err := os.MkdirAll(opts.DataDir, 0700); err != nil {
 		return nil, err

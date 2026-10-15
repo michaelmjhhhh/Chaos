@@ -343,7 +343,6 @@ func TestImagePreparationAndOrientation(t *testing.T) {
 		t.Fatal("EXIF pixel mapping wrong")
 	}
 }
-
 func TestFriendlyDistinguishesFilesystemAndNetworkErrors(t *testing.T) {
 	secretURL := "https://account:private-password@provider.invalid/v1?api_key=private-key"
 	for _, tc := range []struct {
@@ -414,34 +413,33 @@ func TestProviderErrorsAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestProcessorEndToEndPreservesOriginalBytes(t *testing.T) {
+func TestProcessorPreparesNameWithoutMovingOriginal(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "manual.png")
 	sampleImage(t, source, 32, 32)
-	before, _ := os.ReadFile(source)
+	before := readTestFile(t, source)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"terminal-git-log"}}]}`)
 	}))
 	defer server.Close()
 	cfg := testConfig(server.URL, filepath.Join(dir, "out"))
-	processor := Processor{Client: &Client{HTTP: server.Client()}}
-	var stages []string
-	record, err := processor.Process(context.Background(), source, cfg, func(stage string) { stages = append(stages, stage) })
+	cfg.FilenameTemplate = "{slug}_{time}"
+	cfg.SubfolderRule = "day"
+	at := time.Date(2026, 2, 1, 12, 4, 5, 0, time.UTC)
+	processor := Processor{Client: &Client{HTTP: server.Client()}, Now: func() time.Time { return at }}
+	plan, err := processor.Prepare(context.Background(), source, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, _ := os.ReadFile(record.Path)
-	if !bytes.Equal(before, after) {
-		t.Fatal("image bytes changed on disk")
+	if plan.SourcePath != source || plan.Directory != filepath.Join(dir, "out", "2026-02-01") || plan.BaseName != "terminal-git-log-120405" {
+		t.Fatalf("wrong filing plan: %+v", plan)
 	}
-	if record.SourcePath != source || record.ID == "" || record.NewName == "" || record.Duration <= 0 {
-		t.Fatal(record)
+	if err := plan.VerifySource(); err != nil {
+		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(stages, []string{"analyzing", "renaming"}) {
-		t.Fatal(stages)
-	}
-	if _, err = os.Stat(source); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("source not moved")
+	assertImageBytesUnchanged(t, source, before)
+	if _, err := os.Stat(cfg.OutputDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("analysis published a destination: %v", err)
 	}
 }
 
