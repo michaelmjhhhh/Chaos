@@ -88,7 +88,7 @@ func (d *Desktop) welcomeDialog(c *ui.Context) {
 				label = "Start Watching"
 			}
 			provider := core.ProviderByID(d.config.Provider)
-			disabled := step == 1 && provider.RequiresKey && strings.TrimSpace(d.config.APIKey) == ""
+			disabled := step == 1 && (provider.Name == "" || (provider.RequiresKey && strings.TrimSpace(d.config.APIKey) == ""))
 			ui.PrimaryButton(c, label).Disabled(disabled).OnClick(func() {
 				if step == 3 {
 					d.finishWelcome(true)

@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -41,6 +42,7 @@ func (f *testController) SaveConfig(cfg core.Config) {
 	f.saved = cfg
 	f.calls = append(f.calls, "save")
 }
+func (f *testController) DismissWarning()   { f.calls = append(f.calls, "dismiss-warning") }
 func (f *testController) DismissError()     { f.calls = append(f.calls, "dismiss") }
 func (f *testController) ReplayOnboarding() { f.calls = append(f.calls, "replay") }
 func (f *testController) SetAutoStart(v bool) {
@@ -60,9 +62,9 @@ func fixture() (*Desktop, *testController) {
 		{ID: "three", OriginalName: "Old.png", NewName: "terminal-log.png", Path: "/out/terminal-log.png", Timestamp: now.AddDate(0, 0, -2), Duration: .5},
 	}
 	ctl.snapshot.Insights = core.Insights{TotalProcessed: 3, Successes: 2, Errors: 1, ThisMonth: 3, Daily: map[string]int{"2026-10-13": 2, "2026-10-11": 1}, TopCategories: []core.Labeled{{Label: "meeting", Count: 1}, {Label: "terminal", Count: 1}}, FileTypes: []core.Labeled{{Label: "png", Count: 2}}, AvgDuration: .85, P95Duration: 1.2, CurrentStreak: 1, LongestStreak: 1, Fastest: &core.DurationRecord{Name: "terminal-log.png", Duration: .5}, Slowest: &core.DurationRecord{Name: "meeting-notes.png", Duration: 1.2}}
-	ctl.snapshot.Successes = 1
-	ctl.snapshot.Errors = 1
-	ctl.snapshot.AvgLatency = 1.2
+	ctl.snapshot.Insights.TodaySuccesses = 1
+	ctl.snapshot.Insights.TodayErrors = 1
+	ctl.snapshot.Insights.TodayAvgDuration = 1.2
 	d := New(ctl, Actions{})
 	d.now = func() time.Time { return now }
 	return d, ctl
@@ -287,17 +289,10 @@ func TestTrayNavigationAndReveal(t *testing.T) {
 		t.Fatal("tray did not reveal settings")
 	}
 }
-func TestNativeLayoutsAndScreenshots(t *testing.T) {
+func TestNativeRenderSmoke(t *testing.T) {
 	d, _ := fixture()
 	// Empty historical buckets must not move the archive's start month.
 	d.snapshot.Insights.Daily["2020-01-01"] = 0
-	// Set CHAOS_UI_ARTIFACTS to retain native bitmap renders for review.
-	output := os.Getenv("CHAOS_UI_ARTIFACTS")
-	if output != "" {
-		if err := os.MkdirAll(output, 0755); err != nil {
-			t.Fatal(err)
-		}
-	}
 	for _, tab := range []string{"Dashboard", "Pipeline", "Insights", "Settings", "Help"} {
 		for _, dark := range []bool{false, true} {
 			name := strings.ToLower(tab) + "-light"
@@ -315,22 +310,13 @@ func TestNativeLayoutsAndScreenshots(t *testing.T) {
 			if img.Bounds().Dx() != 1000 || img.Bounds().Dy() != 800 {
 				t.Fatalf("%s invalid image", name)
 			}
-			if output != "" {
-				f, err := os.Create(filepath.Join(output, name+".png"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = png.Encode(f, img)
-				f.Close()
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
+			writeScreenshot(t, name, img)
+			assertMainControls(t, tt, tab, 1000, 800)
+
 			// Narrow window must retain top-level navigation and render without panics.
 			tt.SetSize(600, 720)
-			if !tt.HasText("Chaos") {
-				t.Fatalf("%s narrow layout lost shell", name)
-			}
+			assertMainControls(t, tt, tab, 600, 720)
+			writeScreenshot(t, name+"-narrow", tt.Image())
 		}
 	}
 }
@@ -395,7 +381,7 @@ func TestSnapshotOrderingAndAnnouncements(t *testing.T) {
 	}
 }
 
-func TestNativeTrayAndWelcomeScreenshots(t *testing.T) {
+func TestTrayAndWelcomeRenderSmoke(t *testing.T) {
 	d, _ := fixture()
 	for i := 0; i < 2; i++ {
 		f := d.snapshot.RecentFiles[0]
@@ -409,17 +395,102 @@ func TestNativeTrayAndWelcomeScreenshots(t *testing.T) {
 	}
 	d.ShowWelcome()
 	welcome := ui.NewTester(d.View, 1000, 780)
-	for name, tt := range map[string]*ui.Tester{"tray": tray, "welcome": welcome} {
-		if output := os.Getenv("CHAOS_UI_ARTIFACTS"); output != "" {
-			f, err := os.Create(filepath.Join(output, name+".png"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = png.Encode(f, tt.Image())
-			f.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
+	for _, label := range []string{"Start", "Open Output", "Dashboard", "Settings", "Help", "Quit Chaos", "meeting-notes.png"} {
+		assertVisibleControl(t, tray, label, 370, 540)
 	}
+	for _, size := range [][2]int{{1000, 800}, {600, 720}} {
+		welcome.SetSize(size[0], size[1])
+		assertVisibleControl(t, welcome, "Continue", size[0], size[1])
+	}
+	for name, tt := range map[string]*ui.Tester{"tray": tray, "welcome": welcome} {
+		writeScreenshot(t, name, tt.Image())
+	}
+}
+
+func assertVisibleControl(t *testing.T, tt *ui.Tester, label string, width, height int) {
+	t.Helper()
+	r, ok := tt.Find(label)
+	if !ok || r.W <= 0 || r.H <= 0 || r.X < 0 || r.Y < 0 || r.X+r.W > float32(width) || r.Y+r.H > float32(height) {
+		t.Errorf("%q outside %dx%d viewport: %+v found=%v", label, width, height, r, ok)
+	}
+}
+
+func assertMainControls(t *testing.T, tt *ui.Tester, tab string, width, height int) {
+	t.Helper()
+	labels := []string{"Dashboard", "Pipeline", "Insights", "Settings", "Help & Getting Started"}
+	switch tab {
+	case "Dashboard":
+		labels = append(labels, "Start Watching", "Organize Existing Screenshots")
+	case "Pipeline":
+		labels = append(labels, "Search filings", "All", "Errors", "Today", "meeting-notes.png")
+	case "Settings":
+		labels = append(labels, "Provider", "Test Connection", "Choose Watch…", "Choose Output…")
+	case "Help":
+		labels = append(labels, "Search help")
+	}
+	for _, label := range labels {
+		assertVisibleControl(t, tt, label, width, height)
+	}
+	if tab == "Help" {
+		tt.Scroll(float32(width/2), float32(height/2), 0, 10000)
+		assertVisibleControl(t, tt, "Replay Welcome Guide", width, height)
+		assertVisibleControl(t, tt, "Visit website ↗", width, height)
+		tt.Scroll(float32(width/2), float32(height/2), 0, -10000)
+	}
+}
+
+func writeScreenshot(t *testing.T, name string, img image.Image) {
+	t.Helper()
+	output := os.Getenv("CHAOS_UI_ARTIFACTS")
+	if output == "" {
+		return
+	}
+	if err := os.MkdirAll(output, 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(filepath.Join(output, name+".png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encodeErr := png.Encode(f, img)
+	closeErr := f.Close()
+	if encodeErr != nil {
+		t.Fatal(encodeErr)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+}
+
+func TestUnsupportedProviderRequiresSelectionInWelcome(t *testing.T) {
+	d, ctl := fixture()
+	d.config = core.Config{Provider: "unsupported-saved-provider", APIKey: "unsupported-secret"}
+	d.ShowWelcome()
+	tt := ui.NewTester(d.View, 1000, 800)
+	click(t, tt, "Continue")
+	_ = tt.Click("Continue")
+	if d.welcomeStep != 1 {
+		t.Fatal("unsupported provider advanced without a supported selection")
+	}
+	click(t, tt, "Provider")
+	click(t, tt, "OpenAI")
+	if ctl.saved.Provider != "openai" || ctl.saved.APIKey != "" {
+		t.Fatalf("unsupported provider credentials carried to selection: provider=%q hasKey=%v", ctl.saved.Provider, ctl.saved.APIKey != "")
+	}
+}
+
+func TestWarningDismissKeepsErrorRecovery(t *testing.T) {
+	d, ctl := fixture()
+	d.snapshot.Error = "Naming service offline"
+	d.snapshot.Warning = "Clipboard unavailable"
+	d.snapshot.RecoveryAction = core.RecoveryInternet
+	tt := ui.NewTester(d.View, 1000, 800)
+	click(t, tt, "Dismiss warning")
+	if len(ctl.calls) != 1 || ctl.calls[0] != "dismiss-warning" {
+		t.Fatalf("wrong banner action: %v", ctl.calls)
+	}
+	click(t, tt, "Retry failed images")
+	expectCall(t, ctl, "retry-all")
+	click(t, tt, "Dismiss error")
+	expectCall(t, ctl, "dismiss")
 }

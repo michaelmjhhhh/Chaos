@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
 
 func (d *Desktop) dashboard(c *ui.Context) {
@@ -45,10 +46,10 @@ func (d *Desktop) dashboard(c *ui.Context) {
 			side.Children(func() {
 				section(c, "Today", func() {
 					ui.Row(c).Gap(20).Children(func() {
-						metric(c, fmt.Sprint(d.snapshot.Successes), "Filed")
-						metric(c, fmt.Sprint(d.snapshot.Errors), "Errors")
+						metric(c, fmt.Sprint(d.snapshot.Insights.TodaySuccesses), "Filed")
+						metric(c, fmt.Sprint(d.snapshot.Insights.TodayErrors), "Errors")
 					})
-					small(c, "Average "+duration(d.snapshot.AvgLatency)+" per image")
+					small(c, "Average "+duration(d.snapshot.Insights.TodayAvgDuration)+" per image")
 					small(c, "From your complete local history.")
 				})
 				section(c, "Folders", func() {
@@ -64,31 +65,46 @@ func (d *Desktop) dashboard(c *ui.Context) {
 	})
 }
 func (d *Desktop) banners(c *ui.Context) {
-	messages := []struct{ title, text string }{{"Storage", d.snapshot.StorageError}, {"Attention", d.snapshot.Error}, {"Notice", d.snapshot.Warning}, {"Notice", d.notice}}
-	for i, m := range messages {
-		if m.text == "" {
+	for _, kind := range []string{"storage", "error", "warning"} {
+		message := d.snapshot.StorageError
+		if kind == "error" {
+			message = d.snapshot.Error
+		}
+		if kind == "warning" {
+			message = d.snapshot.Warning
+		}
+		if message == "" {
 			continue
 		}
-		ui.Column(c.Key(fmt.Sprintf("banner-%d", i))).Padding(12).Gap(8).Background(c.Theme().Danger.Alpha(.08)).Border(1, c.Theme().Danger.Alpha(.3)).Radius(8).Children(func() {
-			ui.Text(c, m.text).Selectable().TextColor(c.Theme().Danger)
-			if i == 1 {
-				ui.Row(c).Gap(8).Children(func() {
-					if d.snapshot.RecoveryAction == "settings" {
+		ui.Column(c.Key("banner-"+kind)).Padding(12).Gap(8).Background(c.Theme().Danger.Alpha(.08)).Border(1, c.Theme().Danger.Alpha(.3)).Radius(8).Children(func() {
+			ui.Text(c, message).Selectable().TextColor(c.Theme().Danger)
+			if kind == "storage" {
+				return
+			}
+			ui.Row(c).Gap(8).Children(func() {
+				if kind == "error" {
+					switch d.snapshot.RecoveryAction {
+					case core.RecoverySettings:
 						ui.Button(c, "Open Settings").OnClick(func() { d.tab = "Settings" })
-					} else if d.snapshot.RecoveryAction == "retry" || d.snapshot.RecoveryAction == "internet" {
+					case core.RecoveryRetry, core.RecoveryInternet:
 						ui.Button(c, "Retry failed images").OnClick(func() {
 							if d.controller != nil {
 								d.controller.RetryAll()
 							}
 						})
 					}
-					ui.Button(c, "Dismiss").OnClick(func() {
-						if d.controller != nil {
-							d.controller.DismissError()
-						}
-					})
+				}
+				ui.Button(c.Key("dismiss-"+kind), "Dismiss").Label("Dismiss " + kind).OnClick(func() {
+					if d.controller == nil {
+						return
+					}
+					if kind == "warning" {
+						d.controller.DismissWarning()
+					} else {
+						d.controller.DismissError()
+					}
 				})
-			}
+			})
 		})
 	}
 }
@@ -102,11 +118,11 @@ func (d *Desktop) hero(c *ui.Context) {
 	}
 	zone.Children(func() {
 		if d.snapshot.CurrentFile != "" {
-			if b := d.thumbnails[d.snapshot.CurrentPath]; b != nil {
+			if b := d.thumbnail(d.snapshot.CurrentPath); b != nil {
 				ui.Image(c, b).Height(150).FillWidth().Fit(ui.Contain).Radius(8).Label("Current image")
 			}
 			ui.Text(c, d.snapshot.CurrentFile).Font("monospace").FontSize(15).Selectable()
-			stage := d.snapshot.CurrentStage
+			stage := string(d.snapshot.CurrentStage)
 			if stage == "" {
 				stage = "Ready"
 			}

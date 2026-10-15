@@ -3,6 +3,7 @@
 package desktop
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,7 @@ type Controller interface {
 	CheckHealth()
 	CompleteOnboarding(bool)
 	SaveConfig(core.Config)
+	DismissWarning()
 	DismissError()
 	ReplayOnboarding()
 	SetAutoStart(bool)
@@ -42,15 +44,13 @@ type Actions struct {
 	RevealPath          func(string)
 	OpenURL             func(string)
 	Quit                func()
-	ApplyAppearance     func(string)
 	ShowWindow          func()
 	Dispatch            func(func())
-	LoadThumbnail       func(string) ([]byte, error)
+	LoadThumbnail       func(context.Context, string) ([]byte, error)
 }
 
 type Desktop struct {
 	activeSince          time.Time
-	thumbnailSlots       chan struct{}
 	controller           Controller
 	actions              Actions
 	snapshot             app.Snapshot
@@ -68,18 +68,16 @@ type Desktop struct {
 	welcome              bool
 	welcomeStep          int
 	advanced             bool
-	notice               string
 	announcement         string
 	announced            string
-	thumbnails           map[string]*ui.Bitmap
-	thumbnailPending     map[string]bool
-	thumbnailOrder       []string
+	thumbnails           thumbnailCache
 	now                  func() time.Time
 }
 
 func New(controller Controller, actions Actions) *Desktop {
 	home, _ := os.UserHomeDir()
-	d := &Desktop{thumbnailSlots: make(chan struct{}, 2), controller: controller, actions: actions, home: home, tab: "Dashboard", filter: "All", selected: -1, expanded: map[int]bool{}, thumbnails: map[string]*ui.Bitmap{}, thumbnailPending: map[string]bool{}, now: time.Now}
+	d := &Desktop{controller: controller, actions: actions, home: home, tab: "Dashboard", filter: "All", selected: -1, expanded: map[int]bool{}, now: time.Now}
+	d.startThumbnails()
 	if controller != nil {
 		d.snapshot = controller.Snapshot()
 		d.config = d.snapshot.Config
@@ -90,10 +88,10 @@ func New(controller Controller, actions Actions) *Desktop {
 
 // SetSnapshot is called by the shell inside Window.Update, never a worker.
 func (d *Desktop) SetSnapshot(s app.Snapshot) {
-	if s.Revision < d.snapshot.Revision {
+	if d.thumbnails.closed || s.Revision < d.snapshot.Revision {
 		return
 	}
-	if s.Busy && (!d.snapshot.Busy || (s.CurrentPath != "" && s.CurrentPath != d.snapshot.CurrentPath && s.CurrentStage == "analyzing")) {
+	if s.Busy && (!d.snapshot.Busy || (s.CurrentPath != "" && s.CurrentPath != d.snapshot.CurrentPath && s.CurrentStage == app.StageAnalyzing)) {
 		d.activeSince = d.now()
 	}
 	if !reflect.DeepEqual(s.Config, d.snapshot.Config) {
@@ -106,16 +104,17 @@ func (d *Desktop) SetSnapshot(s app.Snapshot) {
 		d.welcomeStep = 0
 	}
 	if s.CurrentStage != d.snapshot.CurrentStage || s.CurrentFile != d.snapshot.CurrentFile {
-		if s.CurrentStage == "success" {
+		if s.CurrentStage == app.StageSuccess {
 			d.announcement = "Filed as " + s.CurrentFile
 		}
-		if s.CurrentStage == "error" {
+		if s.CurrentStage == app.StageError {
 			d.announcement = "Couldn't file " + s.CurrentFile + ". " + s.Error
 		}
 	}
-	if s.APIStatus != d.snapshot.APIStatus && (s.APIStatus == "OK" || s.APIStatus == "FAIL") {
-		d.announcement = "Connection " + s.APIStatus
+	if s.APIStatus != d.snapshot.APIStatus && (s.APIStatus == app.HealthOK || s.APIStatus == app.HealthFailed) {
+		d.announcement = "Connection " + string(s.APIStatus)
 	}
+	d.invalidateThumbnails(s)
 	d.snapshot = s
 	d.requestThumbnail(s.CurrentPath)
 	for i, f := range s.RecentFiles {
@@ -207,13 +206,13 @@ func (d *Desktop) footer(c *ui.Context) {
 	}
 	ui.Row(c).Padding(9, 20).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		color := c.Theme().TextMuted
-		if d.snapshot.APIStatus == "OK" {
+		if d.snapshot.APIStatus == app.HealthOK {
 			color = c.Theme().Success
 		}
-		if d.snapshot.APIStatus == "FAIL" {
+		if d.snapshot.APIStatus == app.HealthFailed {
 			color = c.Theme().Danger
 		}
-		ui.Text(c, "●").TextColor(color).Label("API status " + d.snapshot.APIStatus)
+		ui.Text(c, "●").TextColor(color).Label("API status " + string(d.snapshot.APIStatus))
 		ui.Text(c, p.Name+" · "+model).FontSize(11).TextColor(c.Theme().TextMuted).Grow(1).SingleLine()
 		ui.Text(c, d.status()).FontSize(11).TextColor(c.Theme().TextMuted)
 	})

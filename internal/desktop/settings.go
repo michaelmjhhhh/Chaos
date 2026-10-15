@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/michaelmjhhhh/Chaos/internal/app"
 	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
 
@@ -41,9 +42,6 @@ func (d *Desktop) settings(c *ui.Context) {
 					b := ui.Button(c.Key("appearance-"+name), label).Grow(1).OnClick(func() {
 						d.config.Appearance = name
 						d.save()
-						if d.actions.ApplyAppearance != nil {
-							d.actions.ApplyAppearance(name)
-						}
 					})
 					if current == name {
 						b.Background(c.Theme().Accent.Alpha(.15)).TextColor(c.Theme().Accent)
@@ -66,6 +64,9 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 	section(c, "Naming Service", func() {
 		provider := core.ProviderByID(d.config.Provider)
 		choice := provider.Name
+		if choice == "" {
+			choice = "Choose a supported provider"
+		}
 		providers := core.Providers()
 		names := make([]string, 0, len(providers))
 		for _, p := range providers {
@@ -128,7 +129,7 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 		}
 		ui.Row(c).Gap(12).Children(func() {
 			label := "Test Connection"
-			checking := strings.HasPrefix(d.snapshot.APIStatus, "Checking")
+			checking := d.snapshot.APIStatus == app.HealthChecking
 			if checking {
 				label = "Testing Connection…"
 			}
@@ -138,9 +139,9 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 				}
 			})
 			switch d.snapshot.APIStatus {
-			case "OK":
+			case app.HealthOK:
 				ui.Text(c, "Connection successful.").TextColor(c.Theme().Success)
-			case "FAIL":
+			case app.HealthFailed:
 				ui.Text(c, "Connection failed.").TextColor(c.Theme().Danger)
 			}
 		})
