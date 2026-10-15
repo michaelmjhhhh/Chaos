@@ -17,7 +17,11 @@ func openTestStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	return s
 }
 func TestGRDBSchemaCompatibilityAndMutation(t *testing.T) {
@@ -52,15 +56,22 @@ func TestGRDBSchemaCompatibilityAndMutation(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ext, migration string
-	s.db.QueryRow(`SELECT ext FROM processed_images WHERE id='SWIFT-ID'`).Scan(&ext)
-	s.db.QueryRow(`SELECT identifier FROM grdb_migrations`).Scan(&migration)
+	if err := s.db.QueryRow(`SELECT ext FROM processed_images WHERE id='SWIFT-ID'`).Scan(&ext); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.db.QueryRow(`SELECT identifier FROM grdb_migrations`).Scan(&migration); err != nil {
+		t.Fatal(err)
+	}
 	if ext != "jpg" || migration != "v1_createProcessedImages" {
 		t.Fatal("compatibility metadata damaged")
 	}
 	if err = s.Delete(context.Background(), f.ID); err != nil {
 		t.Fatal(err)
 	}
-	files, _ = s.Recent(context.Background(), 500)
+	files, err = s.Recent(context.Background(), 500)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(files) != 0 {
 		t.Fatal("delete failed")
 	}
@@ -97,7 +108,7 @@ func TestLegacySwiftEpochImportMergesAndKeepsBackups(t *testing.T) {
 	if !seen["swift-failure"].IsError || seen["swift-failure"].ErrorMessage != "API timeout" {
 		t.Fatal("enum decode lost error")
 	}
-	old, _ := os.ReadFile(legacy + ".migrated")
+	old := readTestFile(t, legacy+".migrated")
 	if string(old) != "older-backup" {
 		t.Fatal("older backup overwritten")
 	}
@@ -109,7 +120,10 @@ func TestLegacySwiftEpochImportMergesAndKeepsBackups(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	files, _ = s.Recent(context.Background(), 10)
+	files, err = s.Recent(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(files) != 3 {
 		t.Fatal("migration not idempotent")
 	}

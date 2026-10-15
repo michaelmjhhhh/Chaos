@@ -129,7 +129,7 @@ func assertRejectedImagePreservesSource(t *testing.T, path string) {
 	transport := new(rejectImageHTTP)
 	processor := Processor{Client: &Client{HTTP: transport}}
 	out := filepath.Join(filepath.Dir(path), "out")
-	if _, err := processor.Process(context.Background(), path, testConfig("http://unit.invalid/v1", out), nil); err == nil {
+	if _, err := processor.Prepare(context.Background(), path, testConfig("http://unit.invalid/v1", out)); err == nil {
 		t.Fatal("invalid image was processed")
 	}
 	if transport.calls.Load() != 0 {
