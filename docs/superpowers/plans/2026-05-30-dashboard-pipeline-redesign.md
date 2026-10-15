@@ -1,6 +1,11 @@
 # Dashboard & Pipeline Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Archived — superseded by the native Go application.**
+> This document preserves historical design and implementation steps. Its
+> commands, file paths and task lists are not instructions or outstanding work.
+> See the [archive index](../README.md) and
+> [current compatibility contracts](../../migration/feature-parity.md).
+
 
 **Goal:** Rebuild VibeShot's main window as an editorial-paper publication: a broadsheet Dashboard and a 4-column Pipeline kanban that replaces the History tab.
 
@@ -33,7 +38,7 @@
 - Modify: `Package.swift`
 - Create: `Tests/VibeShotTests/SmokeTests.swift`
 
-- [ ] **Step 1: Update Package.swift to add the test target**
+- **Step 1: Update Package.swift to add the test target**
 
 Replace the contents of `Package.swift` with:
 
@@ -69,7 +74,7 @@ let package = Package(
 )
 ```
 
-- [ ] **Step 2: Write the smoke test**
+- **Step 2: Write the smoke test**
 
 Create `Tests/VibeShotTests/SmokeTests.swift`:
 
@@ -84,12 +89,12 @@ final class SmokeTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 3: Run the smoke test**
+- **Step 3: Run the smoke test**
 
 Run: `swift test --filter SmokeTests`
 Expected: 1 test passes (`testTrueIsTrue`).
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add Package.swift Tests/VibeShotTests/SmokeTests.swift
@@ -105,19 +110,19 @@ The `Package.swift` declares `.process("Resources")` but the directory doesn't e
 **Files:**
 - Create: `VibeShot/Resources/.gitkeep`
 
-- [ ] **Step 1: Create the directory and placeholder**
+- **Step 1: Create the directory and placeholder**
 
 ```bash
 mkdir -p VibeShot/Resources
 touch VibeShot/Resources/.gitkeep
 ```
 
-- [ ] **Step 2: Verify the build still works**
+- **Step 2: Verify the build still works**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Resources/.gitkeep
@@ -133,7 +138,7 @@ git commit -m "chore: add Resources directory placeholder"
 **Files:**
 - Modify: `VibeShot/Views/Theme.swift`
 
-- [ ] **Step 1: Add new color, font, and spacing tokens**
+- **Step 1: Add new color, font, and spacing tokens**
 
 Open `VibeShot/Views/Theme.swift` and add the following inside the `enum Theme` (after the existing `// MARK: - Shadows` block):
 
@@ -166,12 +171,12 @@ Open `VibeShot/Views/Theme.swift` and add the following inside the `enum Theme` 
     static let sBreak: CGFloat = 48
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Theme.swift
@@ -185,7 +190,7 @@ git commit -m "feat(theme): add editorial color, type, and spacing tokens"
 **Files:**
 - Modify: `VibeShot/Views/Theme.swift`
 
-- [ ] **Step 1: Add SmallCaps, Clipping, and Marginalia modifiers**
+- **Step 1: Add SmallCaps, Clipping, and Marginalia modifiers**
 
 In `VibeShot/Views/Theme.swift`, append after the existing `SectionHeader` modifier and before the `extension View`:
 
@@ -245,12 +250,12 @@ extension View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Theme.swift
@@ -264,13 +269,13 @@ git commit -m "feat(theme): add smallCaps, clipping, marginalia view modifiers"
 **Files:**
 - Create: `VibeShot/Views/Editorial/PaperBackground.swift`
 
-- [ ] **Step 1: Create the Editorial directory**
+- **Step 1: Create the Editorial directory**
 
 ```bash
 mkdir -p VibeShot/Views/Editorial
 ```
 
-- [ ] **Step 2: Write PaperBackground.swift**
+- **Step 2: Write PaperBackground.swift**
 
 ```swift
 import SwiftUI
@@ -333,12 +338,12 @@ private struct SeededRandom {
 }
 ```
 
-- [ ] **Step 3: Compile-check**
+- **Step 3: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/PaperBackground.swift
@@ -352,7 +357,7 @@ git commit -m "feat(editorial): add PaperBackground with procedural grain"
 **Files:**
 - Create: `VibeShot/Views/Editorial/EditorialRule.swift`
 
-- [ ] **Step 1: Write EditorialRule.swift**
+- **Step 1: Write EditorialRule.swift**
 
 ```swift
 import SwiftUI
@@ -398,12 +403,12 @@ struct EditorialRule: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/EditorialRule.swift
@@ -420,7 +425,7 @@ git commit -m "feat(editorial): add EditorialRule with optional ornament"
 - Create: `VibeShot/Models/SessionMeta.swift`
 - Create: `Tests/VibeShotTests/SessionMetaTests.swift`
 
-- [ ] **Step 1: Write the failing test**
+- **Step 1: Write the failing test**
 
 Create `Tests/VibeShotTests/SessionMetaTests.swift`:
 
@@ -462,12 +467,12 @@ final class SessionMetaTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- **Step 2: Run the test to verify it fails**
 
 Run: `swift test --filter SessionMetaTests`
 Expected: FAIL with "Cannot find 'SessionMeta' in scope".
 
-- [ ] **Step 3: Implement SessionMeta**
+- **Step 3: Implement SessionMeta**
 
 Create `VibeShot/Models/SessionMeta.swift`:
 
@@ -493,12 +498,12 @@ struct SessionMeta {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- **Step 4: Run the test to verify it passes**
 
 Run: `swift test --filter SessionMetaTests`
 Expected: all 3 tests pass.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add VibeShot/Models/SessionMeta.swift Tests/VibeShotTests/SessionMetaTests.swift
@@ -512,7 +517,7 @@ git commit -m "feat(model): add SessionMeta with persistent session counter"
 **Files:**
 - Create: `VibeShot/Views/Editorial/Masthead.swift`
 
-- [ ] **Step 1: Write Masthead.swift**
+- **Step 1: Write Masthead.swift**
 
 ```swift
 import SwiftUI
@@ -576,12 +581,12 @@ struct Masthead: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/Masthead.swift
@@ -595,7 +600,7 @@ git commit -m "feat(editorial): add Masthead band"
 **Files:**
 - Create: `VibeShot/Views/Editorial/EditorialIcons.swift`
 
-- [ ] **Step 1: Write EditorialIcons.swift**
+- **Step 1: Write EditorialIcons.swift**
 
 ```swift
 import SwiftUI
@@ -708,12 +713,12 @@ enum EditorialIcon {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/EditorialIcons.swift
@@ -727,7 +732,7 @@ git commit -m "feat(editorial): add Eye, TrayArrow, and Shutter glyphs"
 **Files:**
 - Create: `VibeShot/Views/Editorial/DropCap.swift`
 
-- [ ] **Step 1: Write DropCap.swift**
+- **Step 1: Write DropCap.swift**
 
 ```swift
 import SwiftUI
@@ -774,12 +779,12 @@ struct DropCap: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/DropCap.swift
@@ -793,7 +798,7 @@ git commit -m "feat(editorial): add DropCap component"
 **Files:**
 - Create: `VibeShot/Views/Editorial/MetricFigure.swift`
 
-- [ ] **Step 1: Write MetricFigure.swift**
+- **Step 1: Write MetricFigure.swift**
 
 ```swift
 import SwiftUI
@@ -831,12 +836,12 @@ struct MetricFigure: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/MetricFigure.swift
@@ -850,7 +855,7 @@ git commit -m "feat(editorial): add MetricFigure"
 **Files:**
 - Create: `VibeShot/Views/Editorial/Sparkline.swift`
 
-- [ ] **Step 1: Write Sparkline.swift**
+- **Step 1: Write Sparkline.swift**
 
 ```swift
 import SwiftUI
@@ -948,12 +953,12 @@ struct Sparkline: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/Sparkline.swift
@@ -967,7 +972,7 @@ git commit -m "feat(editorial): add Sparkline component"
 **Files:**
 - Create: `VibeShot/Views/Editorial/DateDivider.swift`
 
-- [ ] **Step 1: Write DateDivider.swift**
+- **Step 1: Write DateDivider.swift**
 
 ```swift
 import SwiftUI
@@ -1001,12 +1006,12 @@ struct DateDivider: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/DateDivider.swift
@@ -1023,7 +1028,7 @@ git commit -m "feat(editorial): add DateDivider component"
 - Create: `Tests/VibeShotTests/TokenizerTests.swift`
 - Create: `VibeShot/Models/Tokenizer.swift`
 
-- [ ] **Step 1: Write the failing tests**
+- **Step 1: Write the failing tests**
 
 Create `Tests/VibeShotTests/TokenizerTests.swift`:
 
@@ -1083,12 +1088,12 @@ final class TokenizerTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- **Step 2: Run tests to verify they fail**
 
 Run: `swift test --filter TokenizerTests`
 Expected: FAIL with "Cannot find 'Tokenizer' in scope".
 
-- [ ] **Step 3: Implement Tokenizer**
+- **Step 3: Implement Tokenizer**
 
 Create `VibeShot/Models/Tokenizer.swift`:
 
@@ -1141,12 +1146,12 @@ enum Tokenizer {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- **Step 4: Run tests to verify they pass**
 
 Run: `swift test --filter TokenizerTests`
 Expected: all 6 tests pass.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add VibeShot/Models/Tokenizer.swift Tests/VibeShotTests/TokenizerTests.swift
@@ -1160,7 +1165,7 @@ git commit -m "feat(model): add Tokenizer for vocabulary extraction"
 **Files:**
 - Modify: `VibeShot/Models/ProcessingEvent.swift`
 
-- [ ] **Step 1: Add the .caught case**
+- **Step 1: Add the .caught case**
 
 Edit `VibeShot/Models/ProcessingEvent.swift` to read:
 
@@ -1184,12 +1189,12 @@ enum WatcherStatus: Equatable {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds (`.caught` is unused so far, no warnings on enums).
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Models/ProcessingEvent.swift
@@ -1203,7 +1208,7 @@ git commit -m "feat(model): add .caught stage to ProcessingStage"
 **Files:**
 - Modify: `VibeShot/AppState.swift`
 
-- [ ] **Step 1: Add new stored properties to AppState**
+- **Step 1: Add new stored properties to AppState**
 
 Open `VibeShot/AppState.swift`. After the `var apiStatus: String = "N/A"` line, add:
 
@@ -1213,7 +1218,7 @@ Open `VibeShot/AppState.swift`. After the `var apiStatus: String = "N/A"` line, 
     var successWindow: [Double] = []
 ```
 
-- [ ] **Step 2: Add derived computed properties**
+- **Step 2: Add derived computed properties**
 
 Inside the `AppState` class, after `var p95Latency: TimeInterval { ... }`, add:
 
@@ -1237,7 +1242,7 @@ Inside the `AppState` class, after `var p95Latency: TimeInterval { ... }`, add:
     }
 ```
 
-- [ ] **Step 3: Mark `.caught` in handleNewFile before eligibility check**
+- **Step 3: Mark `.caught` in handleNewFile before eligibility check**
 
 Locate the `handleNewFile` function in `AppState.swift`. Replace its current implementation with:
 
@@ -1319,12 +1324,12 @@ Locate the `handleNewFile` function in `AppState.swift`. Replace its current imp
     }
 ```
 
-- [ ] **Step 4: Compile-check**
+- **Step 4: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add VibeShot/AppState.swift
@@ -1340,7 +1345,7 @@ git commit -m "feat(state): add session, vocabulary, sparkline, and caught-stage
 **Files:**
 - Create: `VibeShot/Views/Editorial/StageProgress.swift`
 
-- [ ] **Step 1: Write StageProgress.swift**
+- **Step 1: Write StageProgress.swift**
 
 ```swift
 import SwiftUI
@@ -1417,12 +1422,12 @@ struct StageProgress: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/StageProgress.swift
@@ -1436,7 +1441,7 @@ git commit -m "feat(editorial): add StageProgress strip"
 **Files:**
 - Create: `VibeShot/Views/Editorial/HeroCard.swift`
 
-- [ ] **Step 1: Write HeroCard.swift**
+- **Step 1: Write HeroCard.swift**
 
 ```swift
 import SwiftUI
@@ -1622,12 +1627,12 @@ struct HeroCard: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/HeroCard.swift
@@ -1641,7 +1646,7 @@ git commit -m "feat(editorial): add HeroCard with typewriter slug and shutter id
 **Files:**
 - Modify: `VibeShot/Views/DashboardView.swift`
 
-- [ ] **Step 1: Replace DashboardView.swift contents**
+- **Step 1: Replace DashboardView.swift contents**
 
 Replace the entire contents of `VibeShot/Views/DashboardView.swift` with:
 
@@ -1985,12 +1990,12 @@ struct DashboardView: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/DashboardView.swift
@@ -2006,7 +2011,7 @@ git commit -m "feat(dashboard): rewrite as editorial broadsheet"
 **Files:**
 - Create: `VibeShot/Views/Editorial/PipelineCard.swift`
 
-- [ ] **Step 1: Write PipelineCard.swift**
+- **Step 1: Write PipelineCard.swift**
 
 ```swift
 import SwiftUI
@@ -2136,12 +2141,12 @@ struct PipelineCard: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/PipelineCard.swift
@@ -2155,7 +2160,7 @@ git commit -m "feat(editorial): add PipelineCard clipping"
 **Files:**
 - Create: `VibeShot/Views/Editorial/PipelineColumn.swift`
 
-- [ ] **Step 1: Write PipelineColumn.swift**
+- **Step 1: Write PipelineColumn.swift**
 
 ```swift
 import SwiftUI
@@ -2212,12 +2217,12 @@ struct EmptyColumnDash: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/PipelineColumn.swift
@@ -2231,7 +2236,7 @@ git commit -m "feat(editorial): add PipelineColumn and EmptyColumnDash"
 **Files:**
 - Create: `VibeShot/Views/Editorial/FiledColumn.swift`
 
-- [ ] **Step 1: Write FiledColumn.swift**
+- **Step 1: Write FiledColumn.swift**
 
 ```swift
 import SwiftUI
@@ -2460,12 +2465,12 @@ struct FiledColumn: View {
 }
 ```
 
-- [ ] **Step 2: Compile-check**
+- **Step 2: Compile-check**
 
 Run: `swift build`
 Expected: build succeeds with no errors.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/FiledColumn.swift
@@ -2480,7 +2485,7 @@ git commit -m "feat(editorial): add FiledColumn with search, filter chips, date 
 - Create: `VibeShot/Views/PipelineView.swift`
 - Delete: `VibeShot/Views/HistoryView.swift`
 
-- [ ] **Step 1: Write PipelineView.swift**
+- **Step 1: Write PipelineView.swift**
 
 Create `VibeShot/Views/PipelineView.swift`:
 
@@ -2594,18 +2599,18 @@ struct PipelineView: View {
 }
 ```
 
-- [ ] **Step 2: Delete HistoryView.swift**
+- **Step 2: Delete HistoryView.swift**
 
 ```bash
 rm VibeShot/Views/HistoryView.swift
 ```
 
-- [ ] **Step 3: Compile-check (expect ContentView to fail since it still references HistoryView)**
+- **Step 3: Compile-check (expect ContentView to fail since it still references HistoryView)**
 
 Run: `swift build`
 Expected: build FAILS with reference to HistoryView. This is expected — Task 6.1 fixes ContentView.
 
-- [ ] **Step 4: Commit (note: build will be broken until Task 6.1; that's OK because they will land together in a series of commits)**
+- **Step 4: Commit (note: build will be broken until Task 6.1; that's OK because they will land together in a series of commits)**
 
 ```bash
 git add VibeShot/Views/PipelineView.swift VibeShot/Views/HistoryView.swift
@@ -2621,7 +2626,7 @@ git commit -m "feat(pipeline): add PipelineView; remove HistoryView (ContentView
 **Files:**
 - Modify: `VibeShot/Views/ContentView.swift`
 
-- [ ] **Step 1: Replace ContentView.swift contents**
+- **Step 1: Replace ContentView.swift contents**
 
 ```swift
 import SwiftUI
@@ -2646,12 +2651,12 @@ struct ContentView: View {
 }
 ```
 
-- [ ] **Step 2: Build**
+- **Step 2: Build**
 
 Run: `swift build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/Views/ContentView.swift
@@ -2665,7 +2670,7 @@ git commit -m "feat(shell): rename History tab to Pipeline; bump window minimum 
 **Files:**
 - Modify: `VibeShot/VibeShotApp.swift`
 
-- [ ] **Step 1: Update default window size**
+- **Step 1: Update default window size**
 
 In `VibeShot/VibeShotApp.swift`, change the `.defaultSize` line to:
 
@@ -2675,12 +2680,12 @@ In `VibeShot/VibeShotApp.swift`, change the `.defaultSize` line to:
 
 (The full file should now have the new default; everything else stays.)
 
-- [ ] **Step 2: Build**
+- **Step 2: Build**
 
 Run: `swift build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/VibeShotApp.swift
@@ -2694,7 +2699,7 @@ git commit -m "feat(shell): bump default window size to 880x620"
 **Files:**
 - Modify: `VibeShot/VibeShotApp.swift`
 
-- [ ] **Step 1: Add tab-switching and Filed-search shortcuts**
+- **Step 1: Add tab-switching and Filed-search shortcuts**
 
 Replace the `.commands { ... }` block in `VibeShotApp.swift` with:
 
@@ -2717,12 +2722,12 @@ Replace the `.commands { ... }` block in `VibeShotApp.swift` with:
 
 Note: `⌘1` / `⌘2` for tab switching are not added in this step because `TabView` with `selection` does not honor those out of the box without extra plumbing. Document this limitation in Task 7.2 verification.
 
-- [ ] **Step 2: Build**
+- **Step 2: Build**
 
 Run: `swift build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- **Step 3: Commit**
 
 ```bash
 git add VibeShot/VibeShotApp.swift
@@ -2741,7 +2746,7 @@ The HeroCard already honors `accessibilityReduceMotion` (typing disabled). Confi
 - Modify: `VibeShot/Views/Editorial/StageProgress.swift`
 - Modify: `VibeShot/Views/Editorial/FiledColumn.swift`
 
-- [ ] **Step 1: Update StageProgress.swift to skip animation under Reduce Motion**
+- **Step 1: Update StageProgress.swift to skip animation under Reduce Motion**
 
 Inside the `StageProgress` struct, add the environment property at the top:
 
@@ -2761,7 +2766,7 @@ to:
                     .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: stage)
 ```
 
-- [ ] **Step 2: Update FiledColumn.swift filter-chip and search-focus animations**
+- **Step 2: Update FiledColumn.swift filter-chip and search-focus animations**
 
 Add the environment property at the top of `FiledColumn`:
 
@@ -2793,12 +2798,12 @@ with:
                 .animation(reduceMotion ? nil : .easeInOut(duration: 0.14), value: searchFocused)
 ```
 
-- [ ] **Step 3: Build**
+- **Step 3: Build**
 
 Run: `swift build`
 Expected: build succeeds.
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add VibeShot/Views/Editorial/StageProgress.swift VibeShot/Views/Editorial/FiledColumn.swift
@@ -2812,40 +2817,40 @@ git commit -m "feat(a11y): honor Reduce Motion in stage and chip animations"
 **Files:**
 - None modified.
 
-- [ ] **Step 1: Run the test suite**
+- **Step 1: Run the test suite**
 
 Run: `swift test`
 Expected: all tests pass (SmokeTests, SessionMetaTests, TokenizerTests). 10 tests total expected.
 
-- [ ] **Step 2: Build the .app bundle**
+- **Step 2: Build the .app bundle**
 
 Run: `./build-app.sh`
 Expected: prints `Built: .build/VibeShot.app`.
 
-- [ ] **Step 3: Launch the app**
+- **Step 3: Launch the app**
 
 Run: `open .build/VibeShot.app`
 Expected: window opens at 880×620 with the editorial masthead at the top. Tabs read "Dashboard" and "Pipeline."
 
-- [ ] **Step 4: Manual verification checklist**
+- **Step 4: Manual verification checklist**
 
 Verify each item below by interacting with the running app. Tick each box only after observing the behavior.
 
-- [ ] Masthead reads `VIBESHOT · DAILY EDITION · {date} · NO. {n}` on both tabs.
-- [ ] Dashboard idle headline reads *"Quietly Watching."* in italic serif.
-- [ ] Dashboard hero card shows shutter glyph + reassuring copy when idle.
-- [ ] Configure an API key in Settings, set watch dir, click "Start Watching" — headline changes to "Watching for screenshots."
-- [ ] Take a screenshot in the watch dir — hero card shows thumbnail, slug appears letter-by-letter, stage progress moves through Analyzing → Renaming.
-- [ ] After processing, "Today's Vocabulary" appears in the right column (requires ≥1 successful slug).
-- [ ] Sparklines (Fig. 1/2/3) render once ≥2 latency data points exist.
-- [ ] Switch to Pipeline tab — masthead persists, four columns visible.
-- [ ] Take another screenshot — card appears briefly in Caught/Reading/Setting columns with active-column hairline turning coral.
-- [ ] Card lands in Filed column. Double-click opens the file. Right-click → Reveal in Finder works.
-- [ ] Search field filters Filed cards. Filter chips (ALL · ERRORS · TODAY) toggle correctly.
-- [ ] Press Space (no text field focused) — Start/Stop toggles.
-- [ ] Resize window to minimum — layout still readable at 760×540, no clipping.
+- Masthead reads `VIBESHOT · DAILY EDITION · {date} · NO. {n}` on both tabs.
+- Dashboard idle headline reads *"Quietly Watching."* in italic serif.
+- Dashboard hero card shows shutter glyph + reassuring copy when idle.
+- Configure an API key in Settings, set watch dir, click "Start Watching" — headline changes to "Watching for screenshots."
+- Take a screenshot in the watch dir — hero card shows thumbnail, slug appears letter-by-letter, stage progress moves through Analyzing → Renaming.
+- After processing, "Today's Vocabulary" appears in the right column (requires ≥1 successful slug).
+- Sparklines (Fig. 1/2/3) render once ≥2 latency data points exist.
+- Switch to Pipeline tab — masthead persists, four columns visible.
+- Take another screenshot — card appears briefly in Caught/Reading/Setting columns with active-column hairline turning coral.
+- Card lands in Filed column. Double-click opens the file. Right-click → Reveal in Finder works.
+- Search field filters Filed cards. Filter chips (ALL · ERRORS · TODAY) toggle correctly.
+- Press Space (no text field focused) — Start/Stop toggles.
+- Resize window to minimum — layout still readable at 760×540, no clipping.
 
-- [ ] **Step 5: Commit no-op if all checks pass; otherwise fix and commit fixes**
+- **Step 5: Commit no-op if all checks pass; otherwise fix and commit fixes**
 
 If any checklist item failed, file an issue or fix it in a follow-up commit with subject like `fix(dashboard): <issue>`.
 

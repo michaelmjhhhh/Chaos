@@ -1,6 +1,11 @@
 # Batch Image Organizer Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Archived — superseded by the native Go application.**
+> This document preserves historical design and implementation steps. Its
+> commands, file paths and task lists are not instructions or outstanding work.
+> See the [archive index](../README.md) and
+> [current compatibility contracts](../../migration/feature-parity.md).
+
 
 **Goal:** Add a Dashboard action that lets users select multiple existing screenshots and process them sequentially through Chaos's existing rename-and-move pipeline.
 
@@ -23,7 +28,7 @@
 - Modify: `Tests/ChaosTests/ImageIntakeTests.swift`
 - Modify: `Chaos/Models/ImageIntake.swift`
 
-- [ ] **Step 1: Write the failing order-preserving filter test**
+- **Step 1: Write the failing order-preserving filter test**
 
 Add to `ImageIntakeTests`:
 
@@ -43,7 +48,7 @@ func testAcceptedURLsFiltersUnsupportedFilesAndPreservesSelectionOrder() {
 }
 ```
 
-- [ ] **Step 2: Run the focused test to verify it fails**
+- **Step 2: Run the focused test to verify it fails**
 
 Run:
 
@@ -53,7 +58,7 @@ swift test --filter ImageIntakeTests
 
 Expected: FAIL because `ImageIntake.acceptedURLs(from:)` does not exist.
 
-- [ ] **Step 3: Add the shared filter**
+- **Step 3: Add the shared filter**
 
 Update `Chaos/Models/ImageIntake.swift`:
 
@@ -73,7 +78,7 @@ enum ImageIntake {
 }
 ```
 
-- [ ] **Step 4: Run the focused tests to verify they pass**
+- **Step 4: Run the focused tests to verify they pass**
 
 Run:
 
@@ -83,7 +88,7 @@ swift test --filter ImageIntakeTests
 
 Expected: PASS with 3 tests and 0 failures.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add Chaos/Models/ImageIntake.swift Tests/ChaosTests/ImageIntakeTests.swift
@@ -96,7 +101,7 @@ git commit -m "feat: centralize manual image intake filtering"
 - Modify: `Chaos/AppState.swift`
 - Modify: `Chaos/Views/DashboardView.swift`
 
-- [ ] **Step 1: Rename the app-state entry point**
+- **Step 1: Rename the app-state entry point**
 
 Replace `processDroppedURLs(_:)` in `Chaos/AppState.swift` with:
 
@@ -116,7 +121,7 @@ func processManualURLs(_ urls: [URL]) {
 This retains sequential processing and makes the method appropriate for both
 drag-and-drop and picker-backed selection.
 
-- [ ] **Step 2: Route drag-and-drop through shared manual intake**
+- **Step 2: Route drag-and-drop through shared manual intake**
 
 Update the Dashboard hero card drop destination:
 
@@ -127,7 +132,7 @@ Update the Dashboard hero card drop destination:
 }
 ```
 
-- [ ] **Step 3: Build to verify the rename and wiring**
+- **Step 3: Build to verify the rename and wiring**
 
 Run:
 
@@ -137,7 +142,7 @@ swift build
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add Chaos/AppState.swift Chaos/Views/DashboardView.swift
@@ -149,7 +154,7 @@ git commit -m "refactor: share sequential manual image intake"
 **Files:**
 - Modify: `Chaos/Views/DashboardView.swift`
 
-- [ ] **Step 1: Import the native picker dependencies**
+- **Step 1: Import the native picker dependencies**
 
 At the top of `Chaos/Views/DashboardView.swift`, use:
 
@@ -159,7 +164,7 @@ import AppKit
 import UniformTypeIdentifiers
 ```
 
-- [ ] **Step 2: Add the organizer action below the Dashboard hero card**
+- **Step 2: Add the organizer action below the Dashboard hero card**
 
 Replace `heroColumn` with:
 
@@ -190,7 +195,7 @@ private var heroColumn: some View {
 }
 ```
 
-- [ ] **Step 3: Present a multi-file image picker**
+- **Step 3: Present a multi-file image picker**
 
 Add to `DashboardView`:
 
@@ -210,7 +215,7 @@ private func organizeExistingScreenshots() {
 }
 ```
 
-- [ ] **Step 4: Build and run the complete test suite**
+- **Step 4: Build and run the complete test suite**
 
 Run:
 
@@ -222,7 +227,7 @@ git diff --check
 
 Expected: all tests pass, no whitespace errors, and `.build/Chaos.app` builds.
 
-- [ ] **Step 5: Launch and inspect the app**
+- **Step 5: Launch and inspect the app**
 
 Run:
 
@@ -239,7 +244,7 @@ Inspect the Dashboard:
 - Cancel closes the picker without starting processing.
 - Existing drag-and-drop still accepts supported images.
 
-- [ ] **Step 6: Commit**
+- **Step 6: Commit**
 
 ```bash
 git add Chaos/Views/DashboardView.swift
@@ -255,7 +260,7 @@ git commit -m "feat: add batch screenshot organizer picker"
 - Review: `Chaos/Views/DashboardView.swift`
 - Review: `Tests/ChaosTests/ImageIntakeTests.swift`
 
-- [ ] **Step 1: Confirm the feature diff is scoped**
+- **Step 1: Confirm the feature diff is scoped**
 
 Run:
 
@@ -268,7 +273,7 @@ git diff main...HEAD -- Chaos/Models/ImageIntake.swift Chaos/AppState.swift Chao
 Expected: only the spec, plan, shared intake filter, app-state rename, Dashboard
 picker, and focused tests changed.
 
-- [ ] **Step 2: Confirm no stale drop-only intake references remain**
+- **Step 2: Confirm no stale drop-only intake references remain**
 
 Run:
 
@@ -279,7 +284,7 @@ rg -n "processDroppedURLs|processManualURLs|acceptedURLs" Chaos Tests
 Expected: no `processDroppedURLs` references; picker and drop destination both
 route through `processManualURLs`; accepted URL filtering is centralized.
 
-- [ ] **Step 3: Run final verification**
+- **Step 3: Run final verification**
 
 Run:
 

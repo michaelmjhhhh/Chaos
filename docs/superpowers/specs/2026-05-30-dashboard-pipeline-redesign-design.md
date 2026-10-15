@@ -1,7 +1,13 @@
 # Dashboard & Pipeline Redesign — Design Spec
 
+> **Archived — superseded by the native Go application.**
+> This document preserves historical design and implementation steps. Its
+> commands, file paths and task lists are not instructions or outstanding work.
+> See the [archive index](../README.md) and
+> [current compatibility contracts](../../migration/feature-parity.md).
+
 **Date:** 2026-05-30
-**Status:** Draft for review
+**Original status:** Draft for review
 **Project:** VibeShot (macOS SwiftUI menu-bar app)
 
 ## 1. Goal

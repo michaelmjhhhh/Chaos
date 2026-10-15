@@ -1,7 +1,13 @@
 # Chaos Brand Migration Design
 
+> **Archived — superseded by the native Go application.**
+> This document preserves historical design and implementation steps. Its
+> commands, file paths and task lists are not instructions or outstanding work.
+> See the [archive index](../README.md) and
+> [current compatibility contracts](../../migration/feature-parity.md).
+
 **Date:** 2026-05-30
-**Status:** Approved
+**Original status:** Approved
 **Project:** Chaos macOS screenshot organizer
 
 ## Goal
