@@ -67,7 +67,7 @@ func (d *Desktop) welcomeDialog(c *ui.Context) {
 		case 1:
 			d.providerSettings(c, true)
 		case 2:
-			d.directoryRow(c, "Output", d.outputDir(), d.actions.PickOutputDirectory)
+			d.directoryRow(c, "Output", d.snapshot.ResolvedOutputDir, d.actions.PickOutputDirectory)
 			d.directoryRow(c, "Watch", d.watchDir(), d.actions.PickWatchDirectory)
 			ui.Text(c, "Images are moved with a clearer name. You can undo a filing from Pipeline.")
 		case 3:

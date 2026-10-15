@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
 
 func (d *Desktop) dashboard(c *ui.Context) {
@@ -56,26 +57,34 @@ func (d *Desktop) dashboard(c *ui.Context) {
 					ui.Text(c, d.shorten(d.watchDir())).Font("monospace").FontSize(12).Selectable()
 					ui.Divider(c)
 					small(c, "OUTPUT")
-					ui.Text(c, d.shorten(d.outputDir())).Font("monospace").FontSize(12).Selectable()
-					ui.Button(c, "Open Output").OnClick(func() { d.open(d.outputDir()) })
+					ui.Text(c, d.shorten(d.snapshot.ResolvedOutputDir)).Font("monospace").FontSize(12).Selectable()
+					ui.Button(c, "Open Output").OnClick(func() { d.open(d.snapshot.ResolvedOutputDir) })
 				})
 			})
 		})
 	})
 }
 func (d *Desktop) banners(c *ui.Context) {
-	messages := []struct{ title, text string }{{"Storage", d.snapshot.StorageError}, {"Attention", d.snapshot.Error}, {"Notice", d.snapshot.Warning}, {"Notice", d.notice}}
-	for i, m := range messages {
+	messages := []struct {
+		key, text string
+		recovery  core.RecoveryAction
+		dismiss   bool
+	}{
+		{key: "storage", text: d.snapshot.StorageError},
+		{key: "error", text: d.snapshot.Error, recovery: d.snapshot.RecoveryAction, dismiss: true},
+		{key: "warning", text: d.snapshot.Warning, dismiss: true},
+	}
+	for _, m := range messages {
 		if m.text == "" {
 			continue
 		}
-		ui.Column(c.Key(fmt.Sprintf("banner-%d", i))).Padding(12).Gap(8).Background(c.Theme().Danger.Alpha(.08)).Border(1, c.Theme().Danger.Alpha(.3)).Radius(8).Children(func() {
+		ui.Column(c.Key("banner-"+m.key)).Padding(12).Gap(8).Background(c.Theme().Danger.Alpha(.08)).Border(1, c.Theme().Danger.Alpha(.3)).Radius(8).Children(func() {
 			ui.Text(c, m.text).Selectable().TextColor(c.Theme().Danger)
-			if i == 1 {
+			if m.dismiss {
 				ui.Row(c).Gap(8).Children(func() {
-					if d.snapshot.RecoveryAction == "settings" {
+					if m.recovery == core.RecoverySettings {
 						ui.Button(c, "Open Settings").OnClick(func() { d.tab = "Settings" })
-					} else if d.snapshot.RecoveryAction == "retry" || d.snapshot.RecoveryAction == "internet" {
+					} else if m.recovery == core.RecoveryRetry || m.recovery == core.RecoveryInternet {
 						ui.Button(c, "Retry failed images").OnClick(func() {
 							if d.controller != nil {
 								d.controller.RetryAll()
@@ -182,7 +191,7 @@ func (d *Desktop) TrayView(c *ui.Context) {
 			ui.Button(c.Key("tray-"+f.ID), name).FillWidth().Height(27).Clip().FontSize(12).Label(name).Disabled(f.Path == "").OnClick(func() { d.reveal(f.Path) })
 		}
 		ui.Divider(c)
-		ui.Button(c, "Open Output").OnClick(func() { d.open(d.outputDir()) })
+		ui.Button(c, "Open Output").OnClick(func() { d.open(d.snapshot.ResolvedOutputDir) })
 		for _, tab := range []string{"Dashboard", "Settings", "Help"} {
 			ui.Button(c.Key("tray-tab-"+tab), tab).OnClick(func() {
 				d.SelectTab(tab)
@@ -192,7 +201,7 @@ func (d *Desktop) TrayView(c *ui.Context) {
 			})
 		}
 		ui.Divider(c)
-		small(c, coreProviderLabel(d.config.Provider, d.config.Model))
+		small(c, providerLabel(d.config))
 		ui.Button(c, "Quit Chaos").OnClick(func() {
 			if d.actions.Quit != nil {
 				d.actions.Quit()

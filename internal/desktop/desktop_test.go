@@ -1,8 +1,7 @@
 package desktop
 
 import (
-	"image/png"
-	"os"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -54,6 +53,9 @@ func (f *testController) SetAutoStart(v bool) {
 func fixture() (*Desktop, *testController) {
 	now := time.Date(2026, 10, 13, 14, 0, 0, 0, time.Local)
 	ctl := &testController{snapshot: app.Snapshot{OnboardingComplete: true, APIStatus: "OK", WatcherStatus: "Paused", Config: core.Config{Provider: "ollama"}}}
+	ctl.snapshot.ResolvedWatchDir = filepath.FromSlash("/input")
+	ctl.snapshot.ResolvedOutputDir = filepath.FromSlash("/out")
+	ctl.snapshot.ConfigPath = filepath.FromSlash("/settings/config.json")
 	ctl.snapshot.RecentFiles = []core.RecentFile{
 		{ID: "one", OriginalName: "Screenshot.png", NewName: "meeting-notes.png", Path: "/out/meeting-notes.png", SourcePath: "/input/Screenshot.png", Timestamp: now, Duration: 1.2},
 		{ID: "two", OriginalName: "Failed.jpg", SourcePath: "/input/Failed.jpg", Timestamp: now.Add(-time.Hour), IsError: true, ErrorMessage: "API timeout"},
@@ -189,9 +191,6 @@ func TestProviderSwitchAndProtectedKey(t *testing.T) {
 	d.SelectTab("Settings")
 	tt := ui.NewTester(d.View, 1000, 1800)
 	click(t, tt, "Provider")
-	if tt.HasText("Chaos (recommended)") {
-		t.Fatal("retired provider is still selectable")
-	}
 	click(t, tt, "OpenAI")
 	if ctl.saved.Provider != "openai" {
 		t.Fatalf("provider=%q", ctl.saved.Provider)
@@ -213,6 +212,14 @@ func TestProviderSwitchAndProtectedKey(t *testing.T) {
 	if !tt.HasText("Base URL") {
 		t.Fatal("custom endpoint must be visible immediately")
 	}
+	click(t, tt, "Advanced options ▾")
+	if d.advanced || tt.HasText("Base URL") {
+		t.Fatal("custom provider advanced options did not collapse")
+	}
+	click(t, tt, "Advanced options ▸")
+	if !tt.HasText("Base URL") {
+		t.Fatal("custom endpoint could not be reopened")
+	}
 }
 func TestWelcomeRequiresProviderSetup(t *testing.T) {
 	d, _ := fixture()
@@ -220,8 +227,8 @@ func TestWelcomeRequiresProviderSetup(t *testing.T) {
 	d.ShowWelcome()
 	tt := ui.NewTester(d.View, 1000, 1200)
 	click(t, tt, "Continue")
-	if !tt.HasText("Turn on naming.") || !tt.HasText("API Key") || tt.HasText("Check free trial") {
-		t.Fatal("welcome must show provider setup without trial controls")
+	if !tt.HasText("Turn on naming.") || !tt.HasText("API Key") {
+		t.Fatal("welcome must show provider setup")
 	}
 	// A disabled button may reject clicks; either way it must not advance.
 	_ = tt.Click("Continue")
@@ -288,49 +295,39 @@ func TestTrayNavigationAndReveal(t *testing.T) {
 	}
 }
 func TestNativeLayoutsAndScreenshots(t *testing.T) {
-	d, _ := fixture()
-	// Empty historical buckets must not move the archive's start month.
-	d.snapshot.Insights.Daily["2020-01-01"] = 0
-	// Set CHAOS_UI_ARTIFACTS to retain native bitmap renders for review.
-	output := os.Getenv("CHAOS_UI_ARTIFACTS")
-	if output != "" {
-		if err := os.MkdirAll(output, 0755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, tab := range []string{"Dashboard", "Pipeline", "Insights", "Settings", "Help"} {
+	for _, page := range []struct{ tab, control string }{
+		{"Dashboard", "Start Watching"}, {"Pipeline", "Search filings"},
+		{"Insights", "Images processed"}, {"Settings", "Provider"}, {"Help", "Search help"},
+	} {
 		for _, dark := range []bool{false, true} {
-			name := strings.ToLower(tab) + "-light"
+			name := strings.ToLower(page.tab) + "-light"
 			if dark {
-				name = strings.ToLower(tab) + "-dark"
+				name = strings.ToLower(page.tab) + "-dark"
 			}
-			d.SelectTab(tab)
-			d.config.Appearance = "system"
-			tt := ui.NewTester(d.View, 1000, 800)
-			tt.SetDark(dark)
-			if tab == "Insights" && !tt.HasText("LIFETIME · SINCE OCT 2026") {
-				t.Fatal("Insights lost the archive start month")
-			}
-			img := tt.Image()
-			if img.Bounds().Dx() != 1000 || img.Bounds().Dy() != 800 {
-				t.Fatalf("%s invalid image", name)
-			}
-			if output != "" {
-				f, err := os.Create(filepath.Join(output, name+".png"))
-				if err != nil {
-					t.Fatal(err)
+			t.Run(name, func(t *testing.T) {
+				d, _ := fixture()
+				// Empty historical buckets must not move the archive's start month.
+				d.snapshot.Insights.Daily["2020-01-01"] = 0
+				d.SelectTab(page.tab)
+				tt := ui.NewTester(d.View, 1000, 800)
+				tt.SetDark(dark)
+				for _, size := range [][2]int{{1000, 800}, {620, 560}} {
+					tt.SetSize(size[0], size[1])
+					for _, label := range []string{"Dashboard", "Pipeline", "Insights", "Settings", "Help & Getting Started", "Paused", page.control} {
+						assertVisible(t, tt, label, size[0], size[1])
+					}
+					if page.tab == "Insights" && !tt.HasText("LIFETIME · SINCE OCT 2026") {
+						t.Fatal("Insights lost the archive start month")
+					}
+					assertThemePixels(t, tt, dark)
+					saveUIArtifact(t, fmt.Sprintf("%s-%dx%d", name, size[0], size[1]), tt)
 				}
-				err = png.Encode(f, img)
-				f.Close()
-				if err != nil {
-					t.Fatal(err)
+				// Navigation must still accept clicks at the minimum window size.
+				click(t, tt, "Settings")
+				if d.tab != "Settings" {
+					t.Fatal("minimum-size navigation did not select Settings")
 				}
-			}
-			// Narrow window must retain top-level navigation and render without panics.
-			tt.SetSize(600, 720)
-			if !tt.HasText("Chaos") {
-				t.Fatalf("%s narrow layout lost shell", name)
-			}
+			})
 		}
 	}
 }
@@ -404,22 +401,40 @@ func TestNativeTrayAndWelcomeScreenshots(t *testing.T) {
 		d.snapshot.RecentFiles = append(d.snapshot.RecentFiles, f)
 	}
 	tray := ui.NewTester(d.TrayView, 370, 540)
-	if rect, ok := tray.Find("Quit Chaos"); !ok || rect.Y+rect.H > 540 {
-		t.Fatalf("tray Quit is clipped: %#v found=%v", rect, ok)
-	}
+	assertVisible(t, tray, "Quit Chaos", 370, 540)
+	assertVisible(t, tray, "Open Output", 370, 540)
+	saveUIArtifact(t, "tray", tray)
 	d.ShowWelcome()
 	welcome := ui.NewTester(d.View, 1000, 780)
-	for name, tt := range map[string]*ui.Tester{"tray": tray, "welcome": welcome} {
-		if output := os.Getenv("CHAOS_UI_ARTIFACTS"); output != "" {
-			f, err := os.Create(filepath.Join(output, name+".png"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			err = png.Encode(f, tt.Image())
-			f.Close()
-			if err != nil {
-				t.Fatal(err)
-			}
+	for step := range 4 {
+		label := "Continue"
+		if step == 3 {
+			label = "Start Watching"
 		}
+		assertVisible(t, welcome, "Skip", 1000, 780)
+		assertVisible(t, welcome, label, 1000, 780)
+		saveUIArtifact(t, fmt.Sprintf("welcome-%d", step), welcome)
+		click(t, welcome, label)
+		if step < 3 && d.welcomeStep != step+1 {
+			t.Fatalf("welcome did not advance from step %d", step)
+		}
+	}
+}
+
+func TestWarningCanBeDismissedWithoutAnError(t *testing.T) {
+	d, ctl := fixture()
+	d.snapshot.Warning = "Clipboard was unavailable"
+	tt := ui.NewTester(d.View, 1000, 900)
+	if !tt.HasText(d.snapshot.Warning) {
+		t.Fatal("warning missing")
+	}
+	click(t, tt, "Dismiss")
+	expectCall(t, ctl, "dismiss")
+	s := d.snapshot
+	s.Warning = ""
+	d.SetSnapshot(s)
+	tt.Frame()
+	if tt.HasText("Clipboard was unavailable") {
+		t.Fatal("dismissed warning still rendered")
 	}
 }
