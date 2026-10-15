@@ -180,14 +180,18 @@ func TestAnalyticsCalendarBoundsAndEmpty(t *testing.T) {
 	loc := time.FixedZone("UTC+8", 8*3600)
 	now := time.Date(2026, 2, 1, 1, 0, 0, 0, loc)
 	files := []RecentFile{{Timestamp: time.Date(2026, 1, 31, 17, 0, 0, 0, time.UTC), Duration: 1}, {Timestamp: time.Date(2026, 1, 31, 15, 0, 0, 0, time.UTC), Duration: 2}, {Timestamp: time.Date(2026, 3, 1, 1, 0, 0, 0, loc), Duration: 3}}
-	insight := ComputeInsights(files, now, loc)
+	aggregate := newInsightsAccumulator(now, loc)
+	for _, file := range files {
+		aggregate.add(file.Timestamp, file.OriginalName, file.NewName, file.Duration, file.IsError)
+	}
+	insight := aggregate.finish()
 	if insight.ThisMonth != 1 || insight.LastMonth != 1 || insight.CurrentStreak != 2 {
 		t.Fatal(insight)
 	}
 	if delta := insight.MonthOverMonth(); delta == nil || *delta != 0 {
 		t.Fatal(delta)
 	}
-	empty := ComputeInsights(nil, now, loc)
+	empty := newInsightsAccumulator(now, loc).finish()
 	if empty.SuccessRate() != 0 || empty.PeakHour() != -1 || empty.MonthOverMonth() != nil || empty.CurrentStreak != 0 {
 		t.Fatal(empty)
 	}
@@ -257,10 +261,10 @@ func TestInsightsFallBackCalendarAndDurationDistribution(t *testing.T) {
 		t.Fatal("category/type aggregation", got.TopCategories, got.FileTypes)
 	}
 }
-func TestDurationStatsPercentileAndInputOwnership(t *testing.T) {
+func TestDurationStatsPercentile(t *testing.T) {
 	values := []float64{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
-	avg, p95 := DurationStats(values)
-	if avg != 10.5 || p95 != 19 || values[0] != 20 || values[19] != 1 {
+	avg, p95 := ownedDurationStats(values)
+	if avg != 10.5 || p95 != 19 {
 		t.Fatal(avg, p95, values)
 	}
 }

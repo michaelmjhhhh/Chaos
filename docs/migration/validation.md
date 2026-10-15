@@ -74,11 +74,18 @@ Staticcheck v0.8.2, formatting, and the cgo-disabled production build also passe
 Production cross-builds passed for Linux/amd64, Windows/amd64 and Darwin/amd64.
 The ad-hoc signed Apple Silicon app and DMG were rebuilt; `hdiutil verify` passed
 and the packaged executable reports `Chaos 1.1.0 (MyGo native)`.
+The packaged app also ran with a fresh isolated profile: switching to Dark visibly
+updated the native window and persisted the setting, the native Help menu replayed
+the welcome guide, completing it persisted onboarding, and Cmd+Q drained and exited
+successfully. This smoke check did not use personal data or call a provider.
 
 Thumbnail regressions use controlled completion and cancellation signals. Render
 smoke tests assert control bounds at 1000×800 and 600×720; standalone and shuffled
 exports into fresh directories passed. These are not pixel-perfect layout checks:
 the narrow Dashboard still has excess vertical spacing before Today.
+Production dead-code analysis with x/tools v0.52.0 reports no unreachable functions;
+the analytics refactor's test-only entry points were removed as well as the old
+file-operation wrappers.
 
 The history benchmark retains full-history statistics while scanning only fields
 needed by the accumulator. A 100,000-row run changed from about 101 ms / 131.6 MB

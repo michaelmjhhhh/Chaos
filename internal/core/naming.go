@@ -115,13 +115,6 @@ var stopWords = func() map[string]bool {
 	return m
 }()
 
-func TopNouns(names []string, limit int) []Labeled {
-	counts := map[string]int{}
-	for _, name := range names {
-		countNouns(counts, name)
-	}
-	return ranked(counts, limit)
-}
 func countNouns(counts map[string]int, name string) {
 	stem := strings.TrimSuffix(name, filepath.Ext(name))
 	for _, t := range strings.FieldsFunc(strings.ToLower(stem), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {

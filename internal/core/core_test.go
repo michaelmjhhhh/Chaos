@@ -196,7 +196,11 @@ func TestNamingSafetyAndTokens(t *testing.T) {
 	if Sanitize("___") != "untitled-shot" {
 		t.Fatal("fallback changed")
 	}
-	top := TopNouns([]string{"terminal-log.jpg", "terminal-the-123.jpeg", "browser-doc.webp"}, 6)
+	counts := map[string]int{}
+	for _, name := range []string{"terminal-log.jpg", "terminal-the-123.jpeg", "browser-doc.webp"} {
+		countNouns(counts, name)
+	}
+	top := ranked(counts, 6)
 	if top[0].Label != "terminal" || top[0].Count != 2 {
 		t.Fatal(top)
 	}

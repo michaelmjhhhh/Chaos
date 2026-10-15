@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -11,7 +12,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -308,18 +308,45 @@ func TestStopCancelsWatchedRequestWithoutMovingSource(t *testing.T) {
 
 func TestRapidStopStartPreservesNewestIntent(t *testing.T) {
 	c, _ := testController(t, successHandler, Effects{})
-	old := runtime.GOMAXPROCS(1)
-	defer runtime.GOMAXPROCS(old)
+	started := make(chan struct{})
+	var startedOnce sync.Once
+	c.SetOnChange(func(s Snapshot) {
+		if s.Watching {
+			startedOnce.Do(func() { close(started) })
+		}
+	})
 	c.Start()
-	eventually(t, "started", func() bool { return c.Snapshot().Watching })
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("initial watcher did not start")
+	}
 	for i := 0; i < 20; i++ {
+		latest := filepath.Join(c.dataDir, fmt.Sprintf("watch-%d", i))
+		if err := os.Mkdir(latest, 0700); err != nil {
+			t.Fatal(err)
+		}
+		watching := make(chan struct{})
+		var once sync.Once
+		c.SetOnChange(func(s Snapshot) {
+			if s.Watching && s.WatcherStatus == "Watching" && s.ActiveWatchDir == latest {
+				once.Do(func() { close(watching) })
+			}
+		})
 		c.Stop()
 		c.Start()
-		c.startWatcher() // Complete reconciliation of the latest intent.
-		if !c.Snapshot().Watching {
-			t.Fatalf("latest Start lost on iteration %d", i)
+		// Force an observable transition; an old Watching snapshot cannot complete
+		// this iteration. Only the worker can activate this newly requested folder.
+		cfg := c.Snapshot().Config
+		cfg.WatchDir = latest
+		c.SaveConfig(cfg)
+		select {
+		case <-watching:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("latest Start/rebind lost on iteration %d: %+v", i, c.Snapshot())
 		}
 	}
+	c.SetOnChange(nil)
 }
 
 func TestUndoWhileWatchingThroughSymlinkDoesNotRefile(t *testing.T) {

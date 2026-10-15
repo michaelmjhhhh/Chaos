@@ -83,16 +83,8 @@ func (s *Store) Insights(ctx context.Context, now time.Time, location *time.Loca
 	return aggregate.finish(), nil
 }
 
-// ComputeInsights applies timezone rules in Go so historical daylight-saving
-// offsets are independent of the host SQLite build's localtime implementation.
-func ComputeInsights(files []RecentFile, now time.Time, location *time.Location) Insights {
-	aggregate := newInsightsAccumulator(now, location)
-	for _, f := range files {
-		aggregate.add(f.Timestamp, f.OriginalName, f.NewName, f.Duration, f.IsError)
-	}
-	return aggregate.finish()
-}
-
+// Calendar aggregation uses Go timezone rules, keeping historical DST offsets
+// independent of the host SQLite build's localtime implementation.
 type insightsAccumulator struct {
 	now                         time.Time
 	location                    *time.Location
@@ -207,10 +199,6 @@ func (a *insightsAccumulator) finish() Insights {
 	return result
 }
 
-// DurationStats leaves caller-owned observations in their original order.
-func DurationStats(values []float64) (float64, float64) {
-	return ownedDurationStats(append([]float64(nil), values...))
-}
 func ownedDurationStats(ordered []float64) (float64, float64) {
 	if len(ordered) == 0 {
 		return 0, 0
