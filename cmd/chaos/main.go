@@ -64,7 +64,7 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 	var shuttingDown, drained atomic.Bool
 	show := func() {
 		if win != nil {
-			win.Update(func() {}) // tray navigation can change the shared view's selected tab
+			win.Invalidate() // tray navigation can change the shared view's selected tab
 			win.Show()
 			win.Focus()
 		}
@@ -81,12 +81,16 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 		if shuttingDown.Swap(true) {
 			return
 		}
+		closingView, closingWindow := view, win
 		go func() {
+			if closingView != nil {
+				closingView.Close()
+			}
 			if err := controller.Close(); err != nil {
 				log.Printf("close history: %v", err)
 			}
-			if win != nil {
-				win.Update(func() { drained.Store(true); mygo.App.Quit() })
+			if closingWindow != nil {
+				closingWindow.Update(func() { drained.Store(true); mygo.App.Quit() })
 			} else {
 				drained.Store(true)
 				mygo.App.Quit()
@@ -192,7 +196,7 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 						_ = tray.SetIcon(trayIcon(lastWatching), runtime.GOOS == "darwin")
 					}
 				}
-				panel.Update(func() {})
+				panel.Invalidate()
 			})
 		})
 		if s := controller.Snapshot(); s.AutoStart {
@@ -208,6 +212,9 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 		}
 	})
 	if err := mygo.App.Run(); err != nil {
+		if view != nil {
+			view.Close()
+		}
 		_ = controller.Close()
 		log.Fatal(err)
 	}

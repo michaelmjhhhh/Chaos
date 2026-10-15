@@ -3,7 +3,9 @@
 package desktop
 
 import (
+	"context"
 	"fmt"
+	"image"
 	"os"
 	"reflect"
 	"strings"
@@ -43,7 +45,7 @@ type Actions struct {
 	Quit                func()
 	ShowWindow          func()
 	Dispatch            func(func())
-	LoadThumbnail       func(string) ([]byte, error)
+	LoadThumbnail       func(context.Context, string) (image.Image, error)
 }
 
 type Desktop struct {
@@ -67,23 +69,36 @@ type Desktop struct {
 	advanced             bool
 	announcement         string
 	announced            string
-	thumbnailSlots       chan struct{}
-	thumbnails           map[string]*ui.Bitmap
-	thumbnailPending     map[string]bool
-	thumbnailOrder       []string
+	thumbnails           map[string]*thumbnailEntry
+	thumbnailUse         uint64
+	thumbnailLoader      *thumbnailLoader
 	now                  func() time.Time
 }
 
 func New(controller Controller, actions Actions) *Desktop {
 	home, _ := os.UserHomeDir()
-	d := &Desktop{thumbnailSlots: make(chan struct{}, 2), controller: controller, actions: actions, home: home, tab: "Dashboard", filter: "All", selected: -1, expanded: map[int]bool{}, thumbnails: map[string]*ui.Bitmap{}, thumbnailPending: map[string]bool{}, now: time.Now}
+	d := &Desktop{
+		controller: controller, actions: actions, home: home,
+		tab: "Dashboard", filter: "All", selected: -1,
+		expanded: make(map[int]bool), thumbnails: make(map[string]*thumbnailEntry), now: time.Now,
+	}
 	if controller != nil {
 		d.snapshot = controller.Snapshot()
 		d.config = d.snapshot.Config
 		d.welcome = !d.snapshot.OnboardingComplete
 		d.advanced = core.ProviderByID(d.config.Provider).CustomURL
 	}
+	d.startThumbnailLoader()
 	return d
+}
+
+// Close cancels thumbnail work and waits for its workers. Call it off the UI
+// thread; queued UI publications become no-ops after cancellation.
+func (d *Desktop) Close() {
+	if loader := d.thumbnailLoader; loader != nil {
+		loader.cancel()
+		loader.workers.Wait()
+	}
 }
 
 // SetSnapshot is called by the shell inside Window.Update, never a worker.
@@ -93,6 +108,8 @@ func (d *Desktop) SetSnapshot(s app.Snapshot) {
 	}
 	if s.Busy && (!d.snapshot.Busy || (s.CurrentPath != "" && s.CurrentPath != d.snapshot.CurrentPath && s.CurrentStage == app.StageAnalyzing)) {
 		d.activeSince = d.now()
+		// A later intake can reuse a source path that was already previewed.
+		delete(d.thumbnails, s.CurrentPath)
 	}
 	if !reflect.DeepEqual(s.Config, d.snapshot.Config) {
 		if s.Config.Provider != d.snapshot.Config.Provider {

@@ -111,7 +111,7 @@ func (d *Desktop) hero(c *ui.Context) {
 	}
 	zone.Children(func() {
 		if d.snapshot.CurrentFile != "" {
-			if b := d.thumbnails[d.snapshot.CurrentPath]; b != nil {
+			if b := d.thumbnail(c, d.snapshot.CurrentPath); b != nil {
 				ui.Image(c, b).Height(150).FillWidth().Fit(ui.Contain).Radius(8).Label("Current image")
 			}
 			ui.Text(c, d.snapshot.CurrentFile).Font("monospace").FontSize(15).Selectable()
