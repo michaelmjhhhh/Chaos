@@ -104,7 +104,7 @@ func TestDashboardCommandsAndTextFocus(t *testing.T) {
 	}
 	// No Space global start/stop while a settings field is being edited.
 	before := len(ctl.calls)
-	click(t, tt, "Provider")
+	click(t, tt, "Ollama")
 	tt.Key(0, ui.KeyEscape)
 	tt.Key(0, ui.KeySpace)
 	for _, call := range ctl.calls[before:] {
@@ -190,7 +190,9 @@ func TestProviderSwitchAndProtectedKey(t *testing.T) {
 	d, ctl := fixture()
 	d.SelectTab("Settings")
 	tt := ui.NewTester(d.View, 1000, 1800)
-	click(t, tt, "Provider")
+	// Disclosures animate; ask for less motion so a collapse is immediate.
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	click(t, tt, "Ollama")
 	click(t, tt, "OpenAI")
 	if ctl.saved.Provider != "openai" {
 		t.Fatalf("provider=%q", ctl.saved.Provider)
@@ -203,20 +205,20 @@ func TestProviderSwitchAndProtectedKey(t *testing.T) {
 	if tt.HasText("secret-test-key") {
 		t.Fatal("API key appears unmasked in render tree")
 	}
-	click(t, tt, "Advanced options ▸")
+	click(t, tt, "Advanced options")
 	if !tt.HasText("Model") || !tt.HasText("https://api.openai.com/v1") {
 		t.Fatal("advanced preset missing")
 	}
-	click(t, tt, "Provider")
+	click(t, tt, "OpenAI")
 	click(t, tt, "OpenAI-Compatible")
 	if !tt.HasText("Base URL") {
 		t.Fatal("custom endpoint must be visible immediately")
 	}
-	click(t, tt, "Advanced options ▾")
+	click(t, tt, "Advanced options")
 	if d.advanced || tt.HasText("Base URL") {
 		t.Fatal("custom provider advanced options did not collapse")
 	}
-	click(t, tt, "Advanced options ▸")
+	click(t, tt, "Advanced options")
 	if !tt.HasText("Base URL") {
 		t.Fatal("custom endpoint could not be reopened")
 	}
@@ -313,10 +315,10 @@ func TestNativeLayoutsAndScreenshots(t *testing.T) {
 				tt.SetDark(dark)
 				for _, size := range [][2]int{{1000, 800}, {620, 560}} {
 					tt.SetSize(size[0], size[1])
-					for _, label := range []string{"Dashboard", "Pipeline", "Insights", "Settings", "Help & Getting Started", "Paused", page.control} {
+					for _, label := range []string{"Dashboard", "Pipeline", "Insights", "Settings", "Help", "Paused", page.control} {
 						assertVisible(t, tt, label, size[0], size[1])
 					}
-					if page.tab == "Insights" && !tt.HasText("LIFETIME · SINCE OCT 2026") {
+					if page.tab == "Insights" && !tt.HasText("Lifetime · since Oct 2026") {
 						t.Fatal("Insights lost the archive start month")
 					}
 					assertThemePixels(t, tt, dark)

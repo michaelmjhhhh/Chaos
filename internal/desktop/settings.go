@@ -10,177 +10,249 @@ import (
 )
 
 func (d *Desktop) settings(c *ui.Context) {
-	ui.Scroll(c.Key("settings-scroll")).Grow(1).Padding(24).Gap(20).Children(func() {
-		heading(c, "Settings", "Connect a naming model and tune your filing workflow.")
+	p := &d.pal
+	d.page(c, "settings", "", "Settings", "Connect a naming model and tune your filing workflow.", nil, func() {
 		d.banners(c)
-		d.providerSettings(c, false)
-		section(c, "Directories", func() {
-			d.directoryRow(c, "Watch", d.watchDir(), d.actions.PickWatchDirectory)
-			d.directoryRow(c, "Output", d.snapshot.ResolvedOutputDir, d.actions.PickOutputDirectory)
+		d.group(c, "Naming service", "", func() { d.providerSettings(c, false) })
+		d.group(c, "Folders", "", func() {
+			d.directoryRow(c, "Watch", "New screenshots here are named and filed.", d.watchDir(), d.actions.PickWatchDirectory)
+			d.directoryRow(c, "Output", "Named images are moved here.", d.snapshot.ResolvedOutputDir, d.actions.PickOutputDirectory)
 		})
 		d.namingSettings(c)
-		section(c, "Behavior", func() {
-			d.settingSwitch(c, "Copy image to clipboard", &d.config.CopyToClipboard, "Put each successfully filed image on the clipboard.")
+		d.group(c, "Behavior", "", func() {
+			d.switchRow(c, "Copy image to clipboard", "Put each successfully filed image on the clipboard.", &d.config.CopyToClipboard, d.save)
 			auto := d.snapshot.AutoStart
-			switchRow(c, "Start watching on launch", &auto, func() {
+			d.switchRow(c, "Start watching on launch", "Chaos begins watching as soon as it opens.", &auto, func() {
 				if d.controller != nil {
 					d.controller.SetAutoStart(auto)
 				}
 			})
-
-			d.settingSwitch(c, "Show a notification when done", &d.config.NotifyOnComplete, "macOS may ask permission when you enable notifications.")
+			d.switchRow(c, "Show a notification when done", "macOS may ask permission when you enable notifications.", &d.config.NotifyOnComplete, d.save)
 		})
-		section(c, "Appearance", func() {
-			current := d.config.Appearance
-			if current == "" {
-				current = "system"
-			}
-			ui.Row(c).Gap(8).FocusGroup(ui.Horizontal).Children(func() {
-				for _, name := range []string{"system", "light", "dark"} {
-					label := strings.ToUpper(name[:1]) + name[1:]
-					b := ui.Button(c.Key("appearance-"+name), label).Grow(1).OnClick(func() {
-						d.config.Appearance = name
-						d.save()
-					})
-					if current == name {
-						b.Background(c.Theme().Accent.Alpha(.15)).TextColor(c.Theme().Accent)
+		d.group(c, "Appearance", "", func() {
+			d.settingRow(c, "appearance", "Theme", "System follows your Mac.", func() {
+				names := []string{"system", "light", "dark"}
+				idx := 0
+				for i, name := range names {
+					if d.config.Appearance == name {
+						idx = i
 					}
 				}
+				items := []seg{{label: "System", icon: icMonitor}, {label: "Light", icon: icSun}, {label: "Dark", icon: icMoon}}
+				if d.segmented(c, "appearance", &idx, items).Changed() {
+					d.config.Appearance = names[idx]
+					d.save()
+				}
 			})
-			small(c, "System follows your Mac. Light and Dark keep Chaos in that appearance.")
 		})
-		section(c, "Configuration", func() {
+		d.group(c, "Configuration", "", func() {
 			path := d.snapshot.ConfigPath
-			ui.Text(c, d.shorten(path)).Font("monospace").Selectable()
-			ui.Button(c, "Reveal config").OnClick(func() { d.reveal(path) })
+			ui.Row(c.Key("config")).Gap(12).Padding(12, 12, 12, 16).Children(func() {
+				ui.Icon(c, icFile).Size(15, 15).TextColor(p.text2)
+				ui.Text(c, d.shorten(path)).Font(mono).FontSize(12).Selectable().SingleLine().Grow(1).MinWidth(0)
+				d.button(c, btn{label: "Reveal config", trailing: icArrowUR, kind: ghost, small: true}).OnClick(func() { d.reveal(path) })
+			})
 		})
 	})
 }
+
+// providerSettings builds the naming-service rows; onboarding shows the
+// essentials only, without the hosted custom endpoint or advanced options.
 func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
-	section(c, "Naming Service", func() {
-		provider := core.ProviderByID(d.config.Provider)
+	p := &d.pal
+	provider := core.ProviderByID(d.config.Provider)
+	d.settingRow(c, "provider", "Provider", provider.Description, func() {
 		choice := provider.Name
 		providers := core.Providers()
 		names := make([]string, 0, len(providers))
-		for _, p := range providers {
-			if onboarding && p.CustomURL {
+		for _, pr := range providers {
+			if onboarding && pr.CustomURL {
 				continue
 			}
-			names = append(names, p.Name)
+			names = append(names, pr.Name)
 		}
-		if ui.Select(c.Key("provider"), &choice, names).Label("Provider").Changed() {
-			for _, p := range providers {
-				if p.Name == choice {
-					d.config.SetProvider(p.ID)
-					d.advanced = p.CustomURL
-					d.save()
-					provider = p
-					break
+		ui.Row(c).Gap(8).Shrink(0).Children(func() {
+			kind, tone := "Remote", p.text2
+			if provider.ID == "ollama" {
+				kind, tone = "Local", p.success
+			}
+			d.pill(c, kind, tone, tone.Alpha(.1))
+			if d.dropdown(c, "provider", "Provider", &choice, names, false).Changed() {
+				for _, pr := range providers {
+					if pr.Name == choice {
+						d.config.SetProvider(pr.ID)
+						d.advanced = pr.CustomURL
+						d.save()
+						provider = pr
+						break
+					}
 				}
 			}
-		}
-		ui.Text(c, provider.Description).TextColor(c.Theme().TextMuted)
-		kind := "Remote"
-		if provider.ID == "ollama" {
-			kind = "Local"
-		}
-		small(c, kind)
-		if provider.RequiresKey {
-			ui.Field(c, "API Key", func() {
-				if ui.TextInput(c.Key("api-key"), &d.config.APIKey).Password().Placeholder("Paste your API key").Changed() {
+		})
+	})
+	if provider.RequiresKey {
+		d.stackRow(c, "api-key", func() {
+			d.field(c, "API Key", "Stored on this Mac. Each provider keeps its own saved key.", func() {
+				if d.input(c, "api-key", &d.config.APIKey, fieldOpts{placeholder: "Paste your API key", icon: icKey, password: true}).Changed() {
 					d.save()
 				}
-			}).Description("Stored on this Mac. Each provider keeps its own saved key.")
+			})
 			if provider.SignupURL != "" {
-				ui.Button(c, "Get an API key ↗").OnClick(func() { d.link(provider.SignupURL) })
+				ui.Row(c).Children(func() {
+					d.button(c, btn{label: "Get an API key", trailing: icArrowUR, kind: ghost, small: true}).Margin(0, 0, 0, -8).OnClick(func() { d.link(provider.SignupURL) })
+				})
 			}
+		})
+	}
+	if !onboarding {
+		d.advancedOptions(c, provider)
+	}
+	d.connection(c, provider)
+}
+
+func (d *Desktop) advancedOptions(c *ui.Context, provider core.Provider) {
+	p := &d.pal
+	ui.Column(c.Key("advanced")).Children(func() {
+		adv := ui.CollapsibleBase(c.Key("advanced-toggle"), &d.advanced)
+		tr := adv.Trigger.Padding(12, 16).Gap(8).Label("Advanced options").FocusRing(false)
+		fg := p.text2
+		if tr.Hovered() || d.advanced {
+			fg = p.text
 		}
-		if !onboarding {
-			label := "Advanced options ▸"
-			if d.advanced {
-				label = "Advanced options ▾"
+		tr.TextColor(tr.AnimateColor("fg", fg, fade))
+		if tr.FocusVisible() {
+			tr.Background(p.hover)
+		}
+		tr.Children(func() {
+			ui.Icon(c, icRight).Size(13, 13).Rotate(90 * adv.Progress())
+			ui.Text(c, "Advanced options").FontWeight(500).Grow(1)
+			if !d.advanced {
+				d.caption(c, "Model, endpoint")
 			}
-			ui.Button(c, label).OnClick(func() { d.advanced = !d.advanced })
-			if d.advanced {
-				ui.Field(c, "Model", func() {
-					if ui.TextInput(c.Key("model"), &d.config.Model).Placeholder(provider.Model).Changed() {
+		})
+		adv.Panel(func() {
+			ui.Column(c).Gap(14).Padding(0, 16, 14, 37).Children(func() {
+				d.field(c, "Model", "Leave blank for the default: "+provider.Model, func() {
+					if d.input(c, "model", &d.config.Model, fieldOpts{placeholder: provider.Model, code: true}).Changed() {
 						d.save()
 					}
-				}).Description("Leave blank for the default: " + provider.Model)
+				})
 				if provider.CustomURL {
-					ui.Field(c, "Base URL", func() {
-						if ui.TextInput(c.Key("base-url"), &d.config.BaseURL).Placeholder("https://example.com/v1").Changed() {
+					d.field(c, "Base URL", "Required for a custom OpenAI-compatible provider.", func() {
+						if d.input(c, "base-url", &d.config.BaseURL, fieldOpts{placeholder: "https://example.com/v1", code: true}).Changed() {
 							d.save()
 						}
-					}).Description("Required for a custom OpenAI-compatible provider.")
+					})
 				} else {
-					ui.Text(c, provider.BaseURL).Font("monospace").FontSize(11).Selectable()
+					ui.Column(c).Gap(4).Children(func() {
+						ui.Text(c, "Endpoint").FontWeight(500)
+						ui.Text(c, provider.BaseURL).Font(mono).FontSize(12).TextColor(p.text2).Selectable()
+					})
 				}
+			})
+		})
+	})
+}
+
+// connection tests the provider; the button's icon turns while a check
+// runs and the result settles into a colored pill beside it.
+func (d *Desktop) connection(c *ui.Context, provider core.Provider) {
+	p := &d.pal
+	hint := "Each image is sent to " + provider.Name + " to generate its name."
+	if provider.ID == "ollama" {
+		hint = "Private: naming runs on your Mac. Install Ollama separately, then run: ollama pull qwen3-vl:2b"
+	}
+	d.settingRow(c, "connection", "Connection", hint, func() {
+		ui.Row(c).Gap(10).Shrink(0).Children(func() {
+			switch d.snapshot.APIStatus {
+			case "OK":
+				ui.Row(c.Key("health")).Gap(6).TextColor(p.success).Transition(ui.ElementTransition{Enter: &ui.Motion{X: 6}}).Children(func() {
+					ui.Icon(c, icCheck).Size(13, 13)
+					ui.Text(c, "Connection successful.").FontSize(12).FontWeight(500)
+				})
+			case "FAIL":
+				ui.Row(c.Key("health")).Gap(6).TextColor(p.danger).Transition(ui.ElementTransition{Enter: &ui.Motion{X: 6}}).Children(func() {
+					ui.Icon(c, icAlert).Size(13, 13)
+					ui.Text(c, "Connection failed.").FontSize(12).FontWeight(500)
+				})
 			}
-		}
-		ui.Row(c).Gap(12).Children(func() {
-			label := "Test Connection"
 			checking := strings.HasPrefix(d.snapshot.APIStatus, "Checking")
+			label := "Test Connection"
 			if checking {
 				label = "Testing Connection…"
 			}
-			ui.Button(c.Key("connection-test"), label).Disabled(checking).OnClick(func() {
+			b := ui.ButtonBase(c.Key("connection-test")).Height(32).PaddingX(12).Gap(6).Radius(8).FontWeight(500).Background(p.fill).Disabled(checking)
+			if b.Hovered() && !checking {
+				b.Background(p.ink.Alpha(.1))
+			}
+			if checking {
+				b.Opacity(.7)
+			}
+			b.OnClick(func() {
 				if d.controller != nil {
 					d.controller.CheckHealth()
 				}
+			}).Children(func() {
+				spin := ui.Icon(c, icRetry).Size(14, 14)
+				if checking {
+					spin.Rotate(spin.Loop("spin", 900*time.Millisecond, ui.Linear) * 360)
+				}
+				ui.Text(c, label).SingleLine()
 			})
-			switch d.snapshot.APIStatus {
-			case "OK":
-				ui.Text(c, "Connection successful.").TextColor(c.Theme().Success)
-			case "FAIL":
-				ui.Text(c, "Connection failed.").TextColor(c.Theme().Danger)
-			}
 		})
-		if d.snapshot.HealthError != "" {
-			ui.Text(c, d.snapshot.HealthError).TextColor(c.Theme().Danger).Selectable()
-		}
-		if provider.ID == "ollama" {
-			small(c, "Private: naming runs on your Mac. Install Ollama separately, then run: ollama pull qwen3-vl:2b")
-		} else {
-			small(c, "Each image is sent to "+provider.Name+" to generate its name.")
-		}
 	})
+	if d.snapshot.HealthError != "" {
+		ui.Column(c.Key("health-error")).Padding(0, 16, 14, 16).Children(func() {
+			d.alert(c, "health", p.danger, icAlert, d.snapshot.HealthError, nil)
+		})
+	}
 }
+
 func (d *Desktop) namingSettings(c *ui.Context) {
-	section(c, "Naming & Filing", func() {
+	p := &d.pal
+	d.group(c, "Naming & filing", "", func() {
 		customActive := d.config.UseCustomPrompt && strings.TrimSpace(d.config.CustomPrompt) != ""
 		lang := "English"
 		if d.config.Language == "zh" {
 			lang = "Chinese"
 		}
-		ui.Field(c, "Name language", func() {
-			if ui.Select(c.Key("name-language"), &lang, []string{"English", "Chinese"}).Disabled(customActive).Changed() {
+		d.settingRow(c, "language", "Name language", "The language of filenames. A custom prompt overrides this choice.", func() {
+			if d.dropdown(c, "name-language", "Name language", &lang, []string{"English", "Chinese"}, customActive).Changed() {
 				d.config.Language = "en"
 				if lang == "Chinese" {
 					d.config.Language = "zh"
 				}
 				d.save()
 			}
-		}).Description("The language of filenames. A custom prompt overrides this choice.")
-		ui.Field(c, "Filename Template", func() {
-			if ui.TextInput(c.Key("filename-template"), &d.config.FilenameTemplate).Placeholder(core.DefaultTemplate).Changed() {
-				d.save()
-			}
-		}).Description("{slug} = AI name · {date} = day · {time} = time")
-		switchRow(c, "Use a custom naming prompt", &d.config.UseCustomPrompt, func() {
-			if d.config.UseCustomPrompt && strings.TrimSpace(d.config.CustomPrompt) == "" {
-				d.config.CustomPrompt = core.DefaultPrompt(d.config.Language)
-			}
-			d.save()
 		})
-
-		if d.config.UseCustomPrompt {
-			if ui.TextArea(c.Key("custom-prompt"), &d.config.CustomPrompt).Height(130).Label("Custom naming prompt").Changed() {
-				d.save()
-			}
-			small(c, "Your prompt replaces the default. Names remain capped and filesystem-safe.")
-			ui.Button(c, "Reset prompt to default").OnClick(func() { d.config.CustomPrompt = core.DefaultPrompt(d.config.Language); d.save() })
-		}
+		d.stackRow(c, "template", func() {
+			d.field(c, "Filename Template", "", func() {
+				if d.input(c, "filename-template", &d.config.FilenameTemplate, fieldOpts{placeholder: core.DefaultTemplate, code: true}).Changed() {
+					d.save()
+				}
+			})
+			// Tokens insert themselves at the end of the template.
+			ui.Row(c).Gap(6).Wrap().Children(func() {
+				for _, tok := range []struct{ token, meaning string }{{"{slug}", "AI name"}, {"{date}", "day"}, {"{time}", "time"}} {
+					chip := ui.ButtonBase(c.Key("token-" + tok.token)).Height(24).PaddingX(8).Gap(6).Radius(6).Tooltip("Add " + tok.token + " to the template")
+					bg := p.fill
+					if chip.Hovered() {
+						bg = p.claySoft
+					}
+					chip.Background(chip.AnimateColor("bg", bg, fade)).OnClick(func() {
+						if d.config.FilenameTemplate == "" {
+							d.config.FilenameTemplate = core.DefaultTemplate
+						}
+						d.config.FilenameTemplate += tok.token
+						d.save()
+					})
+					chip.Children(func() {
+						ui.Text(c, tok.token).Font(mono).FontSize(11.5).TextColor(p.clayText)
+						ui.Text(c, tok.meaning).FontSize(11.5).TextColor(p.text2)
+					})
+				}
+			})
+		})
 		group := "No Subfolders"
 		if d.config.SubfolderRule == "day" {
 			group = "By Day"
@@ -188,8 +260,8 @@ func (d *Desktop) namingSettings(c *ui.Context) {
 		if d.config.SubfolderRule == "month" {
 			group = "By Month"
 		}
-		ui.Field(c, "Group into subfolders", func() {
-			if ui.Select(c.Key("subfolders"), &group, []string{"No Subfolders", "By Day", "By Month"}).Changed() {
+		d.settingRow(c, "subfolders", "Group into subfolders", "Keep the output folder tidy by day or month.", func() {
+			if d.dropdown(c, "subfolders", "Group into subfolders", &group, []string{"No Subfolders", "By Day", "By Month"}, false).Changed() {
 				d.config.SubfolderRule = "none"
 				if group == "By Day" {
 					d.config.SubfolderRule = "day"
@@ -200,38 +272,59 @@ func (d *Desktop) namingSettings(c *ui.Context) {
 				d.save()
 			}
 		})
-		small(c, "PREVIEW")
-		sample := time.Date(2026, 6, 27, 14, 32, 0, 0, time.Local)
-		name := core.RenderName(d.config.FilenameTemplate, "meeting-notes", sample) + ".png"
-		folder := core.OutputDirectory("", d.config.SubfolderRule, sample)
-		ui.Text(c, filepath.Join(folder, name)).Font("monospace").Padding(12).Background(c.Theme().Accent.Alpha(.07)).Radius(6).Selectable()
-	})
-}
-func (d *Desktop) directoryRow(c *ui.Context, label, path string, choose func()) {
-	ui.Column(c.Key("directory-" + label)).Gap(6).Children(func() {
-		small(c, strings.ToUpper(label))
-		ui.Row(c).Gap(12).Children(func() {
-			ui.Text(c, d.shorten(path)).Font("monospace").FontSize(12).Grow(1).Selectable()
-			ui.Button(c, "Choose "+label+"…").OnClick(func() {
-				if choose != nil {
-					choose()
-				}
+		d.stackRow(c, "preview", func() {
+			d.caption(c, "Preview")
+			sample := time.Date(2026, 6, 27, 14, 32, 0, 0, time.Local)
+			name := core.RenderName(d.config.FilenameTemplate, "meeting-notes", sample) + ".png"
+			folder := core.OutputDirectory("", d.config.SubfolderRule, sample)
+			ui.Row(c).Gap(10).Padding(10, 12).Radius(8).Background(p.fill).Children(func() {
+				ui.Icon(c, icImage).Size(14, 14).TextColor(p.text3)
+				ui.Text(c, filepath.Join(folder, name)).Font(mono).FontSize(12.5).Selectable().Grow(1).MinWidth(0).ContentTransition(ui.ContentTransition{})
 			})
 		})
+		d.switchRow(c, "Use a custom naming prompt", "Replace the built-in instructions with your own.", &d.config.UseCustomPrompt, func() {
+			if d.config.UseCustomPrompt && strings.TrimSpace(d.config.CustomPrompt) == "" {
+				d.config.CustomPrompt = core.DefaultPrompt(d.config.Language)
+			}
+			d.save()
+		})
+		if d.config.UseCustomPrompt {
+			ui.Column(c.Key("custom-prompt-row")).Gap(8).Padding(4, 16, 14, 16).Transition(ui.ElementTransition{Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}).Children(func() {
+				if d.textArea(c, "custom-prompt", &d.config.CustomPrompt, "Custom naming prompt", 140).Changed() {
+					d.save()
+				}
+				ui.Row(c).Gap(8).Children(func() {
+					d.caption(c, "Your prompt replaces the default. Names remain capped and filesystem-safe.").Grow(1)
+					d.button(c, btn{label: "Reset prompt to default", icon: icUndo, kind: ghost, small: true}).OnClick(func() {
+						d.config.CustomPrompt = core.DefaultPrompt(d.config.Language)
+						d.save()
+					})
+				})
+			})
+		}
 	})
 }
-func (d *Desktop) settingSwitch(c *ui.Context, label string, value *bool, hint string) {
-	ui.Column(c.Key(label)).Gap(4).Children(func() { switchRow(c, label, value, d.save); small(c, hint) })
-}
 
-// The full label row is clickable, while the inner switch remains a native
-// accessible switch. MyGo gives the innermost control its click, preventing
-// a click on the switch from toggling the enclosing row a second time.
-func switchRow(c *ui.Context, label string, value *bool, changed func()) {
-	ui.Row(c.Key("switch-" + label)).Gap(12).Label(label).OnClick(func() { *value = !*value; changed() }).Children(func() {
-		ui.Text(c, label).Grow(1)
-		if ui.Switch(c, value).Label(label).Changed() {
-			changed()
-		}
+// directoryRow shows a folder as a monospaced path that opens on click,
+// with a quiet button to choose another.
+func (d *Desktop) directoryRow(c *ui.Context, label, hint, path string, choose func()) {
+	p := &d.pal
+	ui.Row(c.Key("directory-"+label)).Gap(12).Padding(10, 12, 10, 16).Children(func() {
+		ui.Row(c).Size(30, 30).Radius(8).Justify(ui.Center).Background(p.fill).Shrink(0).Children(func() {
+			ui.Icon(c, icFolder).Size(15, 15).TextColor(p.text2)
+		})
+		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+			ui.Row(c).Gap(8).Children(func() {
+				ui.Text(c, label).FontWeight(500)
+				d.caption(c, hint).SingleLine()
+			})
+			ui.Text(c, d.shorten(path)).Font(mono).FontSize(12).TextColor(p.text2).SingleLine().Selectable()
+		})
+		d.button(c, btn{label: "Open", kind: ghost, small: true, iconOnly: true, icon: icArrowUR, tip: "Open in Finder"}).OnClick(func() { d.open(path) })
+		d.button(c, btn{label: "Choose " + label + "…", kind: secondary, small: true}).OnClick(func() {
+			if choose != nil {
+				choose()
+			}
+		})
 	})
 }

@@ -20,9 +20,10 @@ func assertVisible(t *testing.T, tt *ui.Tester, label string, width, height int)
 
 func assertThemePixels(t *testing.T, tt *ui.Tester, dark bool) {
 	t.Helper()
-	want := color.RGBA{R: 250, G: 249, B: 245, A: 255}
+	// The left edge is the sidebar, the darkest step of the surface ladder.
+	want := color.RGBA{R: 243, G: 242, B: 236, A: 255}
 	if dark {
-		want = color.RGBA{R: 26, G: 25, B: 24, A: 255}
+		want = color.RGBA{R: 29, G: 28, B: 26, A: 255}
 	}
 	img := tt.Image()
 	if got := img.RGBAAt(0, img.Bounds().Dy()/2); got != want {
