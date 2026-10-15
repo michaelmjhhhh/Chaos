@@ -32,8 +32,29 @@ type Options struct {
 	ImportLegacyPreferences bool
 }
 
+type jobKind string
+
+const (
+	jobProcess jobKind = "process"
+	jobRename  jobKind = "rename"
+	jobRevert  jobKind = "revert"
+)
+
+// Each error is cleared only by a successful operation in its owning category.
+type storageErrors struct {
+	config, preferences, historyRead, historyWrite, recovery error
+}
+
+func (e storageErrors) message() string {
+	if err := errors.Join(e.config, e.preferences, e.historyRead, e.historyWrite, e.recovery); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 type job struct {
-	kind, path, id, name   string
+	kind                   jobKind
+	path, id, name         string
 	watch                  bool
 	batchIndex, batchTotal int
 }
@@ -68,6 +89,7 @@ type Controller struct {
 	closeErr                         error
 	prefs                            Preferences
 	refreshMu                        sync.Mutex
+	storageErrors                    storageErrors
 }
 
 func New(opts Options) (*Controller, error) {
@@ -115,13 +137,11 @@ func New(opts Options) (*Controller, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Controller{ctx: ctx, cancel: cancel, closed: make(chan struct{}), wake: make(chan struct{}, 1), saveWake: make(chan struct{}, 1), pending: make(map[string]bool), store: db, processor: opts.Processor, client: opts.Client, effects: opts.Effects, home: opts.Home, dataDir: opts.DataDir, now: opts.Now, watchInterval: opts.WatchInterval, prefs: prefs}
 	r := cfg.Resolve(opts.Home)
-	c.snapshot = Snapshot{Config: cfg, APIStatus: "N/A", WatcherStatus: "Paused", StartedAt: opts.Now(), SessionNumber: prefs.SessionNumber, AutoStart: prefs.AutoStart, OnboardingComplete: prefs.OnboardingComplete, DataDir: opts.DataDir, ConfigPath: cfgPath, ResolvedWatchDir: r.WatchDir, ResolvedOutputDir: r.OutputDir}
-	if err := errors.Join(cfgErr, prefErr); err != nil {
-		c.snapshot.StorageError = err.Error()
-	}
-	if err := c.recoverOperations(); err != nil {
-		c.snapshot.StorageError = err.Error()
-	}
+	c.snapshot = Snapshot{Config: cfg, APIStatus: HealthUnknown, WatcherStatus: "Paused", AutoStart: prefs.AutoStart, OnboardingComplete: prefs.OnboardingComplete, ConfigPath: cfgPath, ResolvedWatchDir: r.WatchDir, ResolvedOutputDir: r.OutputDir}
+	c.storageErrors.config = cfgErr
+	c.storageErrors.preferences = prefErr
+	c.storageErrors.recovery = c.recoverOperations()
+	c.snapshot.StorageError = c.storageErrors.message()
 	c.refresh()
 	c.watchWake = make(chan struct{}, 1)
 	c.wg.Add(3)
@@ -150,6 +170,7 @@ func (c *Controller) SetOnChange(fn func(Snapshot)) {
 func (c *Controller) change(fn func(*Snapshot)) {
 	c.mu.Lock()
 	fn(&c.snapshot)
+	c.snapshot.StorageError = c.storageErrors.message()
 	c.snapshot.Revision++
 	s := cloneSnapshot(c.snapshot)
 	cb := c.onChange
@@ -163,7 +184,7 @@ func (c *Controller) report(err error) {
 	if err == nil {
 		return
 	}
-	c.change(func(s *Snapshot) { s.Error = err.Error(); s.RecoveryAction = "none" })
+	c.change(func(s *Snapshot) { s.Error = err.Error(); s.RecoveryAction = core.RecoveryNone })
 }
 
 func (c *Controller) ReportError(err error) { c.report(err) }
@@ -171,7 +192,11 @@ func (c *Controller) ReportWarning(message string) {
 	c.change(func(s *Snapshot) { s.Warning = message })
 }
 func (c *Controller) DismissError() {
-	c.change(func(s *Snapshot) { s.Error = ""; s.Warning = ""; s.RecoveryAction = "" })
+	c.change(func(s *Snapshot) { s.Error = ""; s.RecoveryAction = core.RecoveryNone })
+}
+
+func (c *Controller) DismissWarning() {
+	c.change(func(s *Snapshot) { s.Warning = "" })
 }
 
 func (c *Controller) SaveConfig(cfg core.Config) {
@@ -187,11 +212,11 @@ func (c *Controller) SaveConfig(cfg core.Config) {
 	c.snapshot.ResolvedOutputDir = r.OutputDir
 	c.settingsRevision++
 	if old.Provider.ID != r.Provider.ID || old.APIKey != r.APIKey || old.Model != r.Model || old.BaseURL != r.BaseURL {
-		c.snapshot.APIStatus = "N/A"
+		c.snapshot.APIStatus = HealthUnknown
 		c.snapshot.HealthError = ""
 		c.healthRevision++
 	}
-	changedWatch := c.snapshot.Watching && old.WatchDir != r.WatchDir
+	changedWatch := c.wantWatching && old.WatchDir != r.WatchDir
 	c.mu.Unlock()
 	c.signal(c.saveWake)
 	c.change(func(*Snapshot) {})
@@ -269,12 +294,20 @@ func (c *Controller) saveSettings() {
 	if configEdited {
 		configErr = core.SaveConfig(filepath.Join(c.dataDir, "config.json"), cfg)
 	}
-	err := errors.Join(configErr, savePreferences(filepath.Join(c.dataDir, "preferences.json"), p))
+	prefErr := savePreferences(filepath.Join(c.dataDir, "preferences.json"), p)
 	c.change(func(s *Snapshot) {
-		if err != nil {
-			s.StorageError = "Save settings: " + err.Error()
+		if configEdited {
+			c.storageErrors.config = labeledError("Save config", configErr)
 		}
+		c.storageErrors.preferences = labeledError("Save preferences", prefErr)
 	})
+}
+
+func labeledError(label string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", label, err)
 }
 
 func (c *Controller) Start() {
@@ -337,7 +370,7 @@ func (c *Controller) startWatcher() {
 		c.change(func(s *Snapshot) {
 			s.WatcherStatus = "Needs attention"
 			s.Error = err.Error()
-			s.RecoveryAction = "settings"
+			s.RecoveryAction = core.RecoverySettings
 		})
 		return
 	}
@@ -349,7 +382,7 @@ func (c *Controller) startWatcher() {
 		c.change(func(s *Snapshot) {
 			s.WatcherStatus = "Needs attention"
 			s.Error = err.Error()
-			s.RecoveryAction = "settings"
+			s.RecoveryAction = core.RecoverySettings
 		})
 		return
 	}
@@ -359,7 +392,6 @@ func (c *Controller) startWatcher() {
 		s.Watching = true
 		s.WatcherStatus = "Watching"
 		s.ActiveWatchDir = r.WatchDir
-		s.WatcherStartedAt = c.now()
 	})
 	c.CheckHealth()
 }
@@ -377,7 +409,6 @@ func (c *Controller) stopWatcherLocked() {
 		s.Watching = false
 		s.WatcherStatus = "Paused"
 		s.ActiveWatchDir = ""
-		s.WatcherStartedAt = time.Time{}
 		s.QueueLength = len(c.queue)
 	})
 }
@@ -453,7 +484,7 @@ func (c *Controller) enqueue(paths []string, watch bool) {
 	for _, p := range accepted {
 		if !c.pending[p] {
 			c.pending[p] = true
-			added = append(added, job{kind: "process", path: p, watch: watch})
+			added = append(added, job{kind: jobProcess, path: p, watch: watch})
 		}
 	}
 	for i := range added {
@@ -494,18 +525,16 @@ func (c *Controller) RetryAll() {
 	paths := make([]string, 0)
 	for _, r := range s.RecentFiles {
 		if r.IsError && r.SourcePath != "" {
-			if info, err := os.Stat(r.SourcePath); err == nil && info.Mode().IsRegular() {
-				paths = append(paths, r.SourcePath)
-			}
+			paths = append(paths, r.SourcePath)
 		}
 	}
 	c.ProcessFiles(paths)
 }
 
 func (c *Controller) Rename(id, name string) {
-	c.enqueueMutation(job{kind: "rename", id: id, name: name})
+	c.enqueueMutation(job{kind: jobRename, id: id, name: name})
 }
-func (c *Controller) Revert(id string) { c.enqueueMutation(job{kind: "revert", id: id}) }
+func (c *Controller) Revert(id string) { c.enqueueMutation(job{kind: jobRevert, id: id}) }
 func (c *Controller) enqueueMutation(j job) {
 	c.mu.Lock()
 	if c.ctx.Err() == nil {
@@ -544,10 +573,13 @@ func (c *Controller) worker() {
 			c.activeWatch = j.watch
 			c.snapshot.QueueLength = len(c.queue)
 			c.mu.Unlock()
-			if j.kind == "process" {
+			switch j.kind {
+			case jobProcess:
 				c.process(ctx, j)
-			} else {
+			case jobRename, jobRevert:
 				c.mutate(ctx, j)
+			default:
+				c.report(fmt.Errorf("unknown job kind %q", j.kind))
 			}
 			cancel()
 			c.mu.Lock()
@@ -583,7 +615,7 @@ func (c *Controller) checkHealth() {
 		if rev != c.healthRevision {
 			return
 		}
-		s.APIStatus = "Checking…"
+		s.APIStatus = HealthChecking
 		s.HealthError = ""
 	})
 	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
@@ -597,10 +629,10 @@ func (c *Controller) checkHealth() {
 			return
 		}
 		if err == nil {
-			s.APIStatus = "OK"
+			s.APIStatus = HealthOK
 			s.HealthError = ""
 		} else {
-			s.APIStatus = "FAIL"
+			s.APIStatus = HealthFailed
 			s.HealthError = core.Friendly(err, cfg.Provider.ID).Message
 		}
 	})
@@ -613,23 +645,18 @@ func (c *Controller) refresh() {
 	defer cancel()
 	recent, err := c.store.Recent(ctx, 500)
 	if err != nil {
-		c.change(func(s *Snapshot) { s.StorageError = "Read history: " + err.Error() })
+		c.change(func(s *Snapshot) { c.storageErrors.historyRead = labeledError("Read history", err) })
 		return
 	}
 	insights, err := c.store.Insights(ctx, c.now(), time.Local)
 	if err != nil {
-		c.change(func(s *Snapshot) { s.StorageError = "Read insights: " + err.Error() })
+		c.change(func(s *Snapshot) { c.storageErrors.historyRead = labeledError("Read insights", err) })
 		return
 	}
 	c.change(func(s *Snapshot) {
 		s.RecentFiles = recent
 		s.Insights = insights
-		s.HistoryRevision++
-		s.Processed = insights.TodayProcessed
-		s.Successes = insights.TodaySuccesses
-		s.Errors = insights.TodayErrors
-		s.AvgLatency = insights.TodayAvgDuration
-		s.P95Latency = insights.TodayP95Duration
+		c.storageErrors.historyRead = nil
 	})
 }
 

@@ -143,7 +143,7 @@ func TestClipboardFailureRemainsDurableSuccess(t *testing.T) {
 	c.ProcessFiles([]string{source})
 	eventually(t, "clipboard warning", func() bool { s := c.Snapshot(); return len(s.RecentFiles) == 1 && !s.Busy && s.Warning != "" })
 	s := c.Snapshot()
-	if s.RecentFiles[0].IsError || s.Successes != 1 || s.Errors != 0 {
+	if s.RecentFiles[0].IsError || s.Insights.TodaySuccesses != 1 || s.Insights.TodayErrors != 0 {
 		t.Fatalf("filed image became failure: %+v", s.RecentFiles)
 	}
 	if _, err := os.Stat(s.RecentFiles[0].Path); err != nil {
@@ -206,7 +206,7 @@ func TestRecoveryRejectsSameLocationWithoutDeletingImage(t *testing.T) {
 	c, watch := testController(t, successHandler, Effects{})
 	source := filepath.Join(watch, "unchanged.png")
 	want := writePNG(t, source, false)
-	op := operation{Kind: "insert", Source: source, Destination: source, Record: core.RecentFile{ID: newUUID()}}
+	op := operation{Kind: "insert", Source: source, Destination: source, Record: core.RecentFile{ID: core.NewID()}}
 	if err := op.fingerprint(); err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +315,7 @@ func TestRapidStopStartPreservesNewestIntent(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		c.Stop()
 		c.Start()
-		time.Sleep(20 * time.Millisecond)
+		c.startWatcher() // Complete reconciliation of the latest intent.
 		if !c.Snapshot().Watching {
 			t.Fatalf("latest Start lost on iteration %d", i)
 		}
@@ -338,9 +338,15 @@ func TestUndoWhileWatchingThroughSymlinkDoesNotRefile(t *testing.T) {
 	eventually(t, "filed", func() bool { s := c.Snapshot(); return len(s.RecentFiles) == 1 && !s.Busy })
 	c.Revert(c.Snapshot().RecentFiles[0].ID)
 	eventually(t, "undone", func() bool { return len(c.Snapshot().RecentFiles) == 0 })
-	time.Sleep(200 * time.Millisecond)
-	if s := c.Snapshot(); len(s.RecentFiles) != 0 || s.Busy {
-		t.Fatal("Undo was immediately refiled")
+	marker := filepath.Join(watch, "Screenshot progress.png")
+	writePNG(t, marker, true)
+	canonicalMarker, err := canonicalInput(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "watcher processed the next image", func() bool { s := c.Snapshot(); return len(s.RecentFiles) > 0 && !s.Busy })
+	if s := c.Snapshot(); len(s.RecentFiles) != 1 || s.RecentFiles[0].SourcePath != canonicalMarker {
+		t.Fatal("Undo was immediately refiled", s.RecentFiles)
 	}
 	if _, err := os.Stat(source); err != nil {
 		t.Fatal("restored file missing", err)
@@ -363,6 +369,9 @@ func TestCorruptConfigIsNotOverwrittenByPreferenceChange(t *testing.T) {
 	}
 	c.SetAutoStart(true)
 	_ = c.Close()
+	if c.Snapshot().StorageError == "" {
+		t.Fatal("preference save cleared untouched corrupt config error")
+	}
 	b, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(b, corrupt) {
 		t.Fatal("corrupt config overwritten", err)
@@ -435,13 +444,24 @@ func TestRecoveryPreservesReplacedSource(t *testing.T) {
 func TestHealthResultCannotOverrideChangedProvider(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
 	c, _ := testController(t, func(w http.ResponseWriter, r *http.Request) { close(started); <-release; successHandler(w, r) }, Effects{})
-	c.CheckHealth()
-	<-started
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	completed := make(chan struct{})
+	c.run(func() { c.checkHealth(); close(completed) })
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("health did not start")
+	}
 	cfg := c.Snapshot().Config
 	cfg.Model = "new-model"
 	c.SaveConfig(cfg)
-	close(release)
-	time.Sleep(100 * time.Millisecond)
+	releaseOnce.Do(func() { close(release) })
+	select {
+	case <-completed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("health did not complete")
+	}
 	if c.Snapshot().APIStatus != "N/A" {
 		t.Fatal("stale health result overwrote settings revision")
 	}
@@ -458,4 +478,34 @@ func TestSnapshotsDoNotExposeMutableControllerState(t *testing.T) {
 	if next := c.Snapshot(); next.Config.ProviderKeys["openai"] != "original" || next.Insights.Daily["2001-01-01"] != 0 {
 		t.Fatal("snapshot mutated live state")
 	}
+}
+
+func TestSnapshotOwnsEveryMutableMember(t *testing.T) {
+	c, _ := testController(t, successHandler, Effects{})
+	c.change(func(s *Snapshot) {
+		s.Config.ProviderKeys = map[string]string{"provider": "secret"}
+		s.RecentFiles = []core.RecentFile{{ID: "original"}}
+		s.Insights.Daily = map[string]int{"today": 1}
+		s.Insights.TopCategories = []core.Labeled{{Label: "category", Count: 2}}
+		s.Insights.FileTypes = []core.Labeled{{Label: "png", Count: 3}}
+		s.Insights.Fastest = &core.DurationRecord{Name: "fast", Duration: 1}
+		s.Insights.Slowest = &core.DurationRecord{Name: "slow", Duration: 5}
+	})
+	mutate := func(s Snapshot) {
+		s.Config.ProviderKeys["provider"] = "bad"
+		s.RecentFiles[0].ID = "bad"
+		s.Insights.Daily["today"] = 99
+		s.Insights.TopCategories[0].Label = "bad"
+		s.Insights.FileTypes[0].Label = "bad"
+		s.Insights.Fastest.Name = "bad"
+		s.Insights.Slowest.Name = "bad"
+	}
+	mutate(c.Snapshot())
+	c.SetOnChange(mutate)
+	c.change(func(*Snapshot) {})
+	got := c.Snapshot()
+	if got.Config.ProviderKeys["provider"] != "secret" || got.RecentFiles[0].ID != "original" || got.Insights.Daily["today"] != 1 || got.Insights.TopCategories[0].Label != "category" || got.Insights.FileTypes[0].Label != "png" || got.Insights.Fastest.Name != "fast" || got.Insights.Slowest.Name != "slow" {
+		t.Fatalf("snapshot shared live memory: %+v", got)
+	}
+	c.SetOnChange(nil)
 }

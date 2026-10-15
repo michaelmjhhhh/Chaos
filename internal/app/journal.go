@@ -16,10 +16,27 @@ import (
 	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
 
+type operationKind string
+
+const (
+	operationInsert operationKind = "insert"
+	operationUpdate operationKind = "update"
+	operationDelete operationKind = "delete"
+)
+
+func (k operationKind) valid() bool {
+	switch k {
+	case operationInsert, operationUpdate, operationDelete:
+		return true
+	default:
+		return false
+	}
+}
+
 // The journal is written and fsynced before a no-clobber move publishes its
 // destination. Recovery only completes operations whose bytes match that intent.
 type operation struct {
-	Kind        string          `json:"kind"`
+	Kind        operationKind   `json:"kind"`
 	Record      core.RecentFile `json:"record"`
 	Source      string          `json:"source"`
 	Destination string          `json:"destination"`
@@ -113,6 +130,9 @@ func (c *Controller) journalPath(id string) string {
 	return filepath.Join(c.dataDir, "pending", id+".json")
 }
 func (c *Controller) writeOperation(o operation) error {
+	if !o.Kind.valid() {
+		return errors.New("unknown pending history operation")
+	}
 	if o.Record.ID == "" || strings.ContainsAny(o.Record.ID, "/\\") {
 		return errors.New("invalid operation ID")
 	}
@@ -120,7 +140,7 @@ func (c *Controller) writeOperation(o operation) error {
 	if err != nil {
 		return err
 	}
-	return atomicWrite(c.journalPath(o.Record.ID), b)
+	return core.AtomicWrite(c.journalPath(o.Record.ID), b, 0600)
 }
 func (c *Controller) removeOperation(id string) error {
 	err := os.Remove(c.journalPath(id))
@@ -135,11 +155,11 @@ func (c *Controller) commitOperation(o operation) error {
 	defer cancel()
 	var err error
 	switch o.Kind {
-	case "insert":
+	case operationInsert:
 		err = c.store.Insert(ctx, o.Record)
-	case "update":
+	case operationUpdate:
 		err = c.store.Update(ctx, o.Record.ID, o.Record.NewName, o.Record.Path)
-	case "delete":
+	case operationDelete:
 		err = c.store.Delete(ctx, o.Record.ID)
 	default:
 		return errors.New("unknown pending history operation")
@@ -167,7 +187,7 @@ func (c *Controller) recoverOperations() error {
 			failures = append(failures, fmt.Errorf("recover %s: %w", filepath.Base(path), err))
 			continue
 		}
-		if !filepath.IsAbs(o.Source) || !filepath.IsAbs(o.Destination) || o.SHA256 == "" || o.Record.ID == "" || c.journalPath(o.Record.ID) != path {
+		if !o.Kind.valid() || !filepath.IsAbs(o.Source) || !filepath.IsAbs(o.Destination) || o.SHA256 == "" || o.Record.ID == "" || c.journalPath(o.Record.ID) != path {
 			failures = append(failures, fmt.Errorf("invalid recovery record %s; original files preserved", filepath.Base(path)))
 			continue
 		}

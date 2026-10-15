@@ -1,42 +1,50 @@
 package app
 
-import (
-	"time"
+import "github.com/michaelmjhhhh/Chaos/internal/core"
 
-	"github.com/michaelmjhhhh/Chaos/internal/core"
+type ProcessingStage string
+
+const (
+	StageIdle      ProcessingStage = ""
+	StageAnalyzing ProcessingStage = "analyzing"
+	StageRenaming  ProcessingStage = "renaming"
+	StageClipboard ProcessingStage = "clipboard"
+	StageSuccess   ProcessingStage = "success"
+	StageError     ProcessingStage = "error"
+)
+
+type HealthStatus string
+
+const (
+	HealthUnknown  HealthStatus = "N/A"
+	HealthChecking HealthStatus = "Checking…"
+	HealthOK       HealthStatus = "OK"
+	HealthFailed   HealthStatus = "FAIL"
 )
 
 // Snapshot is a detached, immutable copy suitable for handing to the UI thread.
 type Snapshot struct {
-	Revision                                             uint64
-	Config                                               core.Config
-	RecentFiles                                          []core.RecentFile
-	Insights                                             core.Insights
-	Watching                                             bool
-	WatcherStatus, ActiveWatchDir                        string
-	CurrentFile, CurrentPath, CurrentStage               string
-	APIStatus, Error, Warning, StorageError, HealthError string
-	RecoveryAction                                       string
-	Busy                                                 bool
-	BatchIndex, BatchTotal, QueueLength                  int
-	Processed, Successes, Errors                         int
-	AvgLatency, P95Latency                               float64
-	Latencies                                            []float64
-	HourlyThroughput                                     [24]int
-	SuccessWindow                                        []float64
-	WatcherStartedAt, StartedAt                          time.Time
-	SessionNumber                                        int
-	AutoStart, OnboardingComplete                        bool
-	HistoryRevision                                      uint64
-	DataDir, ConfigPath                                  string
-	ResolvedWatchDir, ResolvedOutputDir                  string
+	Revision                                  uint64
+	Config                                    core.Config
+	RecentFiles                               []core.RecentFile
+	Insights                                  core.Insights
+	Watching                                  bool
+	WatcherStatus, ActiveWatchDir             string
+	CurrentFile, CurrentPath                  string
+	CurrentStage                              ProcessingStage
+	APIStatus                                 HealthStatus
+	Error, Warning, StorageError, HealthError string
+	RecoveryAction                            core.RecoveryAction
+	Busy                                      bool
+	BatchIndex, BatchTotal, QueueLength       int
+	AutoStart, OnboardingComplete             bool
+	ConfigPath                                string
+	ResolvedWatchDir, ResolvedOutputDir       string
 }
 
 func cloneSnapshot(s Snapshot) Snapshot {
 	s.Config = cloneConfig(s.Config)
 	s.RecentFiles = append([]core.RecentFile(nil), s.RecentFiles...)
-	s.Latencies = append([]float64(nil), s.Latencies...)
-	s.SuccessWindow = append([]float64(nil), s.SuccessWindow...)
 	s.Insights.Daily = cloneMap(s.Insights.Daily)
 	s.Insights.TopCategories = append([]core.Labeled(nil), s.Insights.TopCategories...)
 	s.Insights.FileTypes = append([]core.Labeled(nil), s.Insights.FileTypes...)

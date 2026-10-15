@@ -143,3 +143,44 @@ func TestRecoveryFingerprintRejectsReplacedDirectoryEntry(t *testing.T) {
 		})
 	}
 }
+
+func TestRecoveryRejectsUnknownKindBeforeRemovingSource(t *testing.T) {
+	dir := t.TempDir()
+	source, destination := filepath.Join(dir, "source.png"), filepath.Join(dir, "destination.png")
+	want := writePNG(t, source, false)
+	if err := os.WriteFile(destination, want, 0600); err != nil {
+		t.Fatal(err)
+	}
+	op := operation{Kind: "unsupported", Record: core.RecentFile{ID: "UNKNOWN"}, Source: source, Destination: destination}
+	if err := op.fingerprint(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "pending", "UNKNOWN.json")
+	if err := core.AtomicWrite(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := New(Options{DataDir: dir, Home: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if c.Snapshot().StorageError == "" {
+		t.Fatal("unknown operation was accepted")
+	}
+	for _, path := range []string{source, destination} {
+		got, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("unknown operation changed %s: %v", path, err)
+		}
+	}
+	if len(c.Snapshot().RecentFiles) != 0 {
+		t.Fatal("unknown operation changed history")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("unknown operation discarded journal", err)
+	}
+}
