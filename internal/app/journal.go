@@ -18,8 +18,16 @@ import (
 
 // The journal is written and fsynced before a no-clobber move publishes its
 // destination. Recovery only completes operations whose bytes match that intent.
+type operationKind string
+
+const (
+	operationInsert operationKind = "insert"
+	operationUpdate operationKind = "update"
+	operationDelete operationKind = "delete"
+)
+
 type operation struct {
-	Kind        string          `json:"kind"`
+	Kind        operationKind   `json:"kind"`
 	Record      core.RecentFile `json:"record"`
 	Source      string          `json:"source"`
 	Destination string          `json:"destination"`
@@ -120,7 +128,7 @@ func (c *Controller) writeOperation(o operation) error {
 	if err != nil {
 		return err
 	}
-	return atomicWrite(c.journalPath(o.Record.ID), b)
+	return core.AtomicWrite(c.journalPath(o.Record.ID), b, 0600)
 }
 func (c *Controller) removeOperation(id string) error {
 	err := os.Remove(c.journalPath(id))
@@ -135,11 +143,11 @@ func (c *Controller) commitOperation(o operation) error {
 	defer cancel()
 	var err error
 	switch o.Kind {
-	case "insert":
+	case operationInsert:
 		err = c.store.Insert(ctx, o.Record)
-	case "update":
+	case operationUpdate:
 		err = c.store.Update(ctx, o.Record.ID, o.Record.NewName, o.Record.Path)
-	case "delete":
+	case operationDelete:
 		err = c.store.Delete(ctx, o.Record.ID)
 	default:
 		return errors.New("unknown pending history operation")

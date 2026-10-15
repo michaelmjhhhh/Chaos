@@ -143,7 +143,7 @@ func (c *Controller) failed(ctx context.Context, j job, cfg core.ResolvedConfig,
 		return
 	}
 	friendly := core.Friendly(err, cfg.Provider.ID)
-	r := core.RecentFile{ID: newUUID(), OriginalName: filepath.Base(j.path), SourcePath: j.path, Timestamp: c.now(), IsError: true, ErrorMessage: friendly.Message}
+	r := core.RecentFile{ID: core.NewID(), OriginalName: filepath.Base(j.path), SourcePath: j.path, Timestamp: c.now(), IsError: true, ErrorMessage: friendly.Message}
 	writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	writeErr := c.store.Insert(writeCtx, r)

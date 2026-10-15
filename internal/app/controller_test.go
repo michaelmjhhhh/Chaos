@@ -206,7 +206,7 @@ func TestRecoveryRejectsSameLocationWithoutDeletingImage(t *testing.T) {
 	c, watch := testController(t, successHandler, Effects{})
 	source := filepath.Join(watch, "unchanged.png")
 	want := writePNG(t, source, false)
-	op := operation{Kind: "insert", Source: source, Destination: source, Record: core.RecentFile{ID: newUUID()}}
+	op := operation{Kind: "insert", Source: source, Destination: source, Record: core.RecentFile{ID: core.NewID()}}
 	if err := op.fingerprint(); err != nil {
 		t.Fatal(err)
 	}
