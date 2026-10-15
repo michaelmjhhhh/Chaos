@@ -14,6 +14,12 @@ import (
 
 const DefaultTemplate = "{slug}_{time}"
 
+var (
+	ErrUnknownProvider    = errors.New("unknown provider; select a provider in Settings")
+	ErrMissingAPIKey      = errors.New("API key not configured")
+	ErrInvalidProviderURL = errors.New("invalid provider base URL")
+)
+
 type Provider struct {
 	ID, Name, BaseURL, Model, Description, SignupURL string
 	RequiresKey, CustomURL                           bool
@@ -31,12 +37,15 @@ func Providers() []Provider {
 }
 func ProviderByID(id string) Provider {
 	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
+		return Providers()[0]
+	}
 	for _, p := range Providers() {
 		if p.ID == id {
 			return p
 		}
 	}
-	return Providers()[0]
+	return Provider{}
 }
 
 type Config struct {
@@ -58,15 +67,37 @@ type Config struct {
 }
 
 type ResolvedConfig struct {
-	Provider                                                                                                         Provider
-	APIKey, Model, BaseURL, WatchDir, OutputDir, Language, FilenameTemplate, SubfolderRule, Appearance, CustomPrompt string
-	CopyToClipboard, NotifyOnComplete                                                                                bool
+	Provider         Provider
+	APIKey           string
+	Model            string
+	BaseURL          string
+	WatchDir         string
+	OutputDir        string
+	Language         string
+	FilenameTemplate string
+	SubfolderRule    string
+	Appearance       string
+	CustomPrompt     string
+	CopyToClipboard  bool
+	NotifyOnComplete bool
 }
 
 func (c Config) Resolve(home string) ResolvedConfig {
 	c = c.withoutRetiredProvider()
 	p := ProviderByID(c.Provider)
-	r := ResolvedConfig{Provider: p, Model: strings.TrimSpace(c.Model), BaseURL: p.BaseURL, WatchDir: strings.TrimSpace(c.WatchDir), OutputDir: strings.TrimSpace(c.OutputDir), Language: strings.ToLower(strings.TrimSpace(c.Language)), FilenameTemplate: strings.TrimSpace(c.FilenameTemplate), SubfolderRule: c.SubfolderRule, Appearance: c.Appearance, CopyToClipboard: c.CopyToClipboard, NotifyOnComplete: c.NotifyOnComplete}
+	r := ResolvedConfig{
+		Provider:         p,
+		Model:            strings.TrimSpace(c.Model),
+		BaseURL:          p.BaseURL,
+		WatchDir:         strings.TrimSpace(c.WatchDir),
+		OutputDir:        strings.TrimSpace(c.OutputDir),
+		Language:         strings.ToLower(strings.TrimSpace(c.Language)),
+		FilenameTemplate: strings.TrimSpace(c.FilenameTemplate),
+		SubfolderRule:    c.SubfolderRule,
+		Appearance:       c.Appearance,
+		CopyToClipboard:  c.CopyToClipboard,
+		NotifyOnComplete: c.NotifyOnComplete,
+	}
 	if p.RequiresKey {
 		r.APIKey = strings.TrimSpace(c.APIKey)
 	}
@@ -111,8 +142,11 @@ func expandHome(path, home string) string {
 	return filepath.Clean(path)
 }
 func (r ResolvedConfig) Validate() error {
+	if r.Provider.ID == "" {
+		return ErrUnknownProvider
+	}
 	if r.Provider.RequiresKey && strings.TrimSpace(r.APIKey) == "" {
-		return errors.New("API key not configured")
+		return ErrMissingAPIKey
 	}
 	if _, err := endpoint(r.BaseURL, "chat/completions"); err != nil {
 		return err
@@ -126,14 +160,14 @@ func (c *Config) SetProvider(id string) {
 	*c = c.withoutRetiredProvider()
 	old := ProviderByID(c.Provider).ID
 	next := ProviderByID(id).ID
-	if old == next {
+	if next == "" || old == next {
 		return
 	}
 	keys := make(map[string]string, len(c.ProviderKeys)+1)
 	for k, v := range c.ProviderKeys {
 		keys[k] = v
 	}
-	if c.APIKey != "" {
+	if old != "" && c.APIKey != "" {
 		keys[old] = c.APIKey
 	}
 	c.ProviderKeys = keys
@@ -232,7 +266,7 @@ func AtomicWrite(path string, data []byte, mode os.FileMode) error {
 func endpoint(base, suffix string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(base))
 	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return "", errors.New("invalid provider base URL")
+		return "", ErrInvalidProviderURL
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/" + suffix
 	return u.String(), nil

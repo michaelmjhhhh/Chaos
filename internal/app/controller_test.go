@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,19 +19,6 @@ import (
 
 	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
-
-type testHTTPClient struct {
-	client *http.Client
-	t      *testing.T
-}
-
-func (c testHTTPClient) Do(request *http.Request) (*http.Response, error) {
-	response, err := c.client.Do(request)
-	if err != nil {
-		c.t.Logf("local test provider transport: %v", err)
-	}
-	return response, err
-}
 
 func testController(t *testing.T, handler http.HandlerFunc, effects Effects) (*Controller, string) {
 	t.Helper()
@@ -46,7 +33,7 @@ func testController(t *testing.T, handler http.HandlerFunc, effects Effects) (*C
 	if err := core.SaveConfig(filepath.Join(dir, "config.json"), cfg); err != nil {
 		t.Fatal(err)
 	}
-	c, err := New(Options{DataDir: dir, Home: dir, Client: &core.Client{HTTP: testHTTPClient{client: server.Client(), t: t}}, Effects: effects, WatchInterval: 10 * time.Millisecond})
+	c, err := New(Options{DataDir: dir, Home: dir, Client: &core.Client{HTTP: server.Client()}, Effects: effects, WatchInterval: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +84,15 @@ func eventually(t *testing.T, why string, f func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out: %s", why)
+}
+
+func waitFor(t *testing.T, why string, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(6 * time.Second):
+		t.Fatalf("timed out: %s", why)
+	}
 }
 
 func TestFilingRenameReopenAndRevertPreserveBytes(t *testing.T) {
@@ -176,7 +172,11 @@ func TestSourceReplacedDuringAnalysisIsPreserved(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
 	c, watch := testController(t, func(w http.ResponseWriter, r *http.Request) {
 		close(started)
-		<-release
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
 		successHandler(w, r)
 	}, Effects{})
 	var once sync.Once
@@ -184,11 +184,7 @@ func TestSourceReplacedDuringAnalysisIsPreserved(t *testing.T) {
 	source := filepath.Join(watch, "original.png")
 	writePNG(t, source, false)
 	c.ProcessFiles([]string{source})
-	select {
-	case <-started:
-	case <-time.After(3 * time.Second):
-		t.Fatal("provider not called")
-	}
+	waitFor(t, "provider started analysis", started)
 	replacement := filepath.Join(watch, "replacement.png")
 	want := writePNG(t, replacement, true)
 	if err := os.Rename(replacement, source); err != nil {
@@ -206,7 +202,7 @@ func TestRecoveryRejectsSameLocationWithoutDeletingImage(t *testing.T) {
 	c, watch := testController(t, successHandler, Effects{})
 	source := filepath.Join(watch, "unchanged.png")
 	want := writePNG(t, source, false)
-	op := operation{Kind: "insert", Source: source, Destination: source, Record: core.RecentFile{ID: newUUID()}}
+	op := operation{Kind: "insert", Source: source, Destination: source, Record: core.RecentFile{ID: core.NewID()}}
 	if err := op.fingerprint(); err != nil {
 		t.Fatal(err)
 	}
@@ -241,29 +237,31 @@ func TestAppearanceChangeRetainsConnectionHealth(t *testing.T) {
 
 func TestQueueDeduplicatesConcurrentIntake(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
+	releaseProvider := sync.OnceFunc(func() { close(release) })
+	defer releaseProvider()
 	var calls atomic.Int32
 	c, watch := testController(t, func(w http.ResponseWriter, r *http.Request) {
 		if calls.Add(1) == 1 {
 			close(started)
 		}
-		<-release
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
 		successHandler(w, r)
 	}, Effects{})
 	source := filepath.Join(watch, "duplicate.png")
 	writePNG(t, source, false)
 	c.ProcessFiles([]string{source})
-	select {
-	case <-started:
-	case <-time.After(3 * time.Second):
-		t.Fatal("provider not called")
-	}
+	waitFor(t, "provider started analysis", started)
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func() { defer wg.Done(); c.enqueue([]string{source, source}, false) }()
 	}
 	wg.Wait()
-	close(release)
+	releaseProvider()
 	eventually(t, "one durable success", func() bool { s := c.Snapshot(); return len(s.RecentFiles) == 1 && !s.Busy })
 	if calls.Load() != 1 {
 		t.Fatalf("%d duplicate paid calls", calls.Load())
@@ -275,9 +273,14 @@ func TestStopCancelsWatchedRequestWithoutMovingSource(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	c, watch := testController(t, func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&payload)
-		if payload["max_tokens"] == float64(8) {
+		var payload struct {
+			MaxTokens int `json:"max_tokens"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Error(err)
+			return
+		}
+		if payload.MaxTokens == 8 {
 			successHandler(w, r)
 			return
 		}
@@ -291,11 +294,7 @@ func TestStopCancelsWatchedRequestWithoutMovingSource(t *testing.T) {
 	eventually(t, "watcher started", func() bool { return c.Snapshot().Watching })
 	source := filepath.Join(watch, "Screenshot cancel.png")
 	writePNG(t, source, true)
-	select {
-	case <-started:
-	case <-time.After(4 * time.Second):
-		t.Fatal("watcher did not call provider")
-	}
+	waitFor(t, "watcher called provider", started)
 	c.Stop()
 	eventually(t, "watcher and request stopped", func() bool { s := c.Snapshot(); return !s.Watching && !s.Busy })
 	if _, err := os.Stat(source); err != nil {
@@ -308,17 +307,22 @@ func TestStopCancelsWatchedRequestWithoutMovingSource(t *testing.T) {
 
 func TestRapidStopStartPreservesNewestIntent(t *testing.T) {
 	c, _ := testController(t, successHandler, Effects{})
-	old := runtime.GOMAXPROCS(1)
-	defer runtime.GOMAXPROCS(old)
 	c.Start()
 	eventually(t, "started", func() bool { return c.Snapshot().Watching })
 	for i := 0; i < 20; i++ {
+		cfg := c.Snapshot().Config
+		cfg.WatchDir = t.TempDir()
+		// Hold reconciliation until both intents are queued. A new directory
+		// gives us an observable acknowledgement of this iteration's Start.
+		c.watchMu.Lock()
 		c.Stop()
+		c.SaveConfig(cfg)
 		c.Start()
-		time.Sleep(20 * time.Millisecond)
-		if !c.Snapshot().Watching {
-			t.Fatalf("latest Start lost on iteration %d", i)
-		}
+		c.watchMu.Unlock()
+		eventually(t, "latest Start rebound watcher", func() bool {
+			s := c.Snapshot()
+			return s.Watching && s.ActiveWatchDir == cfg.WatchDir
+		})
 	}
 }
 
@@ -337,9 +341,21 @@ func TestUndoWhileWatchingThroughSymlinkDoesNotRefile(t *testing.T) {
 	writePNG(t, source, true)
 	eventually(t, "filed", func() bool { s := c.Snapshot(); return len(s.RecentFiles) == 1 && !s.Busy })
 	c.Revert(c.Snapshot().RecentFiles[0].ID)
-	eventually(t, "undone", func() bool { return len(c.Snapshot().RecentFiles) == 0 })
-	time.Sleep(200 * time.Millisecond)
-	if s := c.Snapshot(); len(s.RecentFiles) != 0 || s.Busy {
+	eventually(t, "undone", func() bool { s := c.Snapshot(); return len(s.RecentFiles) == 0 && !s.Busy })
+	// A later screenshot confirms complete watcher scans and queue processing
+	// after restoration. The restored filename sorts before this barrier file.
+	barrier := filepath.Join(watch, "Screenshot z-after-undo.png")
+	writePNG(t, barrier, true)
+	eventually(t, "watcher processed image after undo", func() bool {
+		s := c.Snapshot()
+		for _, r := range s.RecentFiles {
+			if r.OriginalName == filepath.Base(barrier) && !r.IsError && !s.Busy {
+				return true
+			}
+		}
+		return false
+	})
+	if s := c.Snapshot(); len(s.RecentFiles) != 1 || s.RecentFiles[0].OriginalName != filepath.Base(barrier) {
 		t.Fatal("Undo was immediately refiled")
 	}
 	if _, err := os.Stat(source); err != nil {
@@ -362,10 +378,100 @@ func TestCorruptConfigIsNotOverwrittenByPreferenceChange(t *testing.T) {
 		t.Fatal("corrupt settings silently ignored")
 	}
 	c.SetAutoStart(true)
-	_ = c.Close()
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
 	b, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(b, corrupt) {
 		t.Fatal("corrupt config overwritten", err)
+	}
+}
+
+func TestCorrectedConfigClearsOnlyItsOwnStorageError(t *testing.T) {
+	for _, other := range []string{"", "recovery", "history"} {
+		name := other
+		if name == "" {
+			name = "config only"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.json")
+			if err := os.WriteFile(path, []byte("not-json"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			c, err := New(Options{DataDir: dir, Home: dir})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := c.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+			if c.Snapshot().StorageError == "" {
+				t.Fatal("corrupt config was not reported")
+			}
+			preserved := ""
+			if other != "" {
+				preserved = "unresolved " + other
+				c.change(func(*Snapshot) bool {
+					if other == "recovery" {
+						c.storageErrors.recovery = preserved
+					} else {
+						c.storageErrors.historyWrite = preserved
+					}
+					return true
+				})
+			}
+			cfg := core.Config{Provider: "ollama", WatchDir: dir, OutputDir: filepath.Join(dir, "out")}
+			c.SaveConfig(cfg)
+			if err := c.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if loaded, err := core.LoadConfig(path, ""); err != nil || loaded.Provider != cfg.Provider {
+				t.Fatalf("corrected config was not saved: %+v, %v", loaded, err)
+			}
+			if got := c.Snapshot().StorageError; got != preserved {
+				t.Fatalf("config repair left wrong storage errors: %q, want %q", got, preserved)
+			}
+		})
+	}
+}
+
+func TestUnchangedConfigAndPreferenceEditsDoNotRewriteConfig(t *testing.T) {
+	c, _ := testController(t, successHandler, Effects{})
+	cfg := c.Snapshot().Config
+	cfg.Appearance = "dark"
+	c.SaveConfig(cfg)
+	eventually(t, "explicit config edit persisted", func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.savedConfigRevision == c.configRevision
+	})
+	path := filepath.Join(c.dataDir, "config.json")
+	oldTime := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.SaveConfig(cfg)
+	c.SetAutoStart(true)
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Fatal("unchanged provider config was rewritten for a preference edit or shutdown")
+	}
+	prefs, err := loadPreferences(filepath.Join(c.dataDir, "preferences.json"), nil)
+	if err != nil || !prefs.AutoStart {
+		t.Fatalf("preference edit was not persisted: %+v, %v", prefs, err)
 	}
 }
 
@@ -381,7 +487,10 @@ func TestRecoveryCommitsPublishedMoveIdempotently(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "pending"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := json.Marshal(op)
+	b, err := json.Marshal(op)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "pending", r.ID+".json"), b, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +506,9 @@ func TestRecoveryCommitsPublishedMoveIdempotently(t *testing.T) {
 		if s := c.Snapshot(); len(s.RecentFiles) != 1 || s.RecentFiles[0].ID != r.ID || s.StorageError != "" {
 			t.Fatalf("recovery: %+v, %s", s.RecentFiles, s.StorageError)
 		}
-		_ = c.Close()
+		if err := c.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := os.Stat(source); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("recovery did not finish move")
@@ -413,35 +524,65 @@ func TestRecoveryPreservesReplacedSource(t *testing.T) {
 	source, destination := filepath.Join(dir, "source.png"), filepath.Join(dir, "filed.png")
 	original := writePNG(t, source, false)
 	op := operation{Kind: "insert", Record: core.RecentFile{ID: "REPLACED", Timestamp: time.Now()}, Source: source, Destination: destination}
-	_ = op.fingerprint()
-	_ = os.MkdirAll(filepath.Join(dir, "pending"), 0700)
-	b, _ := json.Marshal(op)
-	_ = os.WriteFile(filepath.Join(dir, "pending", "REPLACED.json"), b, 0600)
-	_ = os.WriteFile(destination, original, 0600)
-	_ = os.WriteFile(source, []byte("new unrelated file"), 0600)
+	if err := op.fingerprint(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "pending"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	journal, err := json.Marshal(op)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journalPath := filepath.Join(dir, "pending", "REPLACED.json")
+	if err := os.WriteFile(journalPath, journal, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	replacement := []byte("new unrelated file")
+	if err := os.WriteFile(source, replacement, 0600); err != nil {
+		t.Fatal(err)
+	}
 	c, err := New(Options{DataDir: dir, Home: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	if c.Snapshot().StorageError == "" {
-		t.Fatal("conflict not surfaced")
+	if s := c.Snapshot(); !strings.Contains(s.StorageError, "source was replaced after filing") || len(s.RecentFiles) != 0 {
+		t.Fatalf("replacement conflict not surfaced without recording success: %+v", s)
 	}
-	if b, _ := os.ReadFile(source); string(b) != "new unrelated file" {
-		t.Fatal("replaced source deleted")
+	for path, want := range map[string][]byte{source: replacement, destination: original, journalPath: journal} {
+		if got, err := os.ReadFile(path); err != nil || !bytes.Equal(got, want) {
+			t.Fatalf("recovery changed %s: %v", path, err)
+		}
 	}
 }
 
 func TestHealthResultCannotOverrideChangedProvider(t *testing.T) {
 	started, release := make(chan struct{}), make(chan struct{})
-	c, _ := testController(t, func(w http.ResponseWriter, r *http.Request) { close(started); <-release; successHandler(w, r) }, Effects{})
-	c.CheckHealth()
-	<-started
+	releaseProvider := sync.OnceFunc(func() { close(release) })
+	defer releaseProvider()
+	c, _ := testController(t, func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		select {
+		case <-release:
+			successHandler(w, r)
+		case <-r.Context().Done():
+		}
+	}, Effects{})
+	completed := make(chan struct{})
+	c.run(func() {
+		defer close(completed)
+		c.checkHealth()
+	})
+	waitFor(t, "health request started", started)
 	cfg := c.Snapshot().Config
 	cfg.Model = "new-model"
 	c.SaveConfig(cfg)
-	close(release)
-	time.Sleep(100 * time.Millisecond)
+	releaseProvider()
+	waitFor(t, "stale health response handled", completed)
 	if c.Snapshot().APIStatus != "N/A" {
 		t.Fatal("stale health result overwrote settings revision")
 	}

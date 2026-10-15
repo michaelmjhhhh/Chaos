@@ -122,10 +122,9 @@ func (d *Desktop) pipeline(c *ui.Context) {
 	})
 }
 func (d *Desktop) historyCard(c *ui.Context, f core.RecentFile) {
-	d.requestThumbnail(f.Path)
 	row := ui.Row(c.Key("record-"+f.ID)).Padding(10).Gap(12).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
 	row.Children(func() {
-		if bitmap := d.thumbnails[f.Path]; bitmap != nil {
+		if bitmap := d.thumbnail(c, f.Path); bitmap != nil {
 			ui.Image(c, bitmap).Size(44, 44).Fit(ui.Cover).Radius(6)
 		} else {
 			ui.Box(c).Size(44, 44).Radius(6).Background(c.Theme().Border.Alpha(.35)).Children(func() { ui.Text(c, "▧").Padding(10).TextColor(c.Theme().TextMuted) })

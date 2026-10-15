@@ -1,6 +1,11 @@
 # Ollama Provider and Settings Refresh Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Archived — superseded by the native Go application.**
+> This document preserves historical design and implementation steps. Its
+> commands, file paths and task lists are not instructions or outstanding work.
+> See the [archive index](../README.md) and
+> [current compatibility contracts](../../migration/feature-parity.md).
+
 
 **Goal:** Add Ollama as a first-class optional local provider and replace the confusing Settings form with a clearer editorial card layout.
 
@@ -26,7 +31,7 @@
 - Create: `Tests/ChaosTests/ProviderTests.swift`
 - Modify: `Chaos/Models/Provider.swift`
 
-- [ ] **Step 1: Write failing Ollama provider tests**
+- **Step 1: Write failing Ollama provider tests**
 
 ```swift
 import XCTest
@@ -49,14 +54,14 @@ final class ProviderTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- **Step 2: Run tests to verify they fail**
 
 Run: `swift test --filter ProviderTests`
 
 Expected: FAIL because `Provider.ollama`, `requiresAPIKey`,
 `allowsCustomBaseURL`, and `connectionKind` do not exist.
 
-- [ ] **Step 3: Implement provider metadata**
+- **Step 3: Implement provider metadata**
 
 Add `.ollama` and switch branches for:
 
@@ -70,13 +75,13 @@ var connectionFailureHint: String { /* Ollama pull hint or remote hint */ }
 
 Use `http://localhost:11434/v1` and `qwen3-vl:2b` for Ollama defaults.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- **Step 4: Run tests to verify they pass**
 
 Run: `swift test --filter ProviderTests`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add Chaos/Models/Provider.swift Tests/ChaosTests/ProviderTests.swift
@@ -89,7 +94,7 @@ git commit -m "feat: add ollama provider preset"
 - Modify: `Tests/ChaosTests/ProviderTests.swift`
 - Modify: `Chaos/AppState.swift`
 
-- [ ] **Step 1: Add failing state-resolution tests**
+- **Step 1: Add failing state-resolution tests**
 
 ```swift
 @MainActor
@@ -119,14 +124,14 @@ func testOllamaDoesNotRequireAPIKeyToStart() {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- **Step 2: Run tests to verify they fail**
 
 Run: `swift test --filter ProviderTests`
 
 Expected: FAIL because `selectProvider`, `resolvedAPIKey`, and
 `startupValidationError` do not exist.
 
-- [ ] **Step 3: Implement state behavior**
+- **Step 3: Implement state behavior**
 
 Add:
 
@@ -154,13 +159,13 @@ func selectProvider(_ provider: Provider) {
 Use `startupValidationError` in `start()` and pass `resolvedAPIKey` through
 health checks and processing.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- **Step 4: Run tests to verify they pass**
 
 Run: `swift test --filter ProviderTests`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add Chaos/AppState.swift Tests/ChaosTests/ProviderTests.swift
@@ -173,7 +178,7 @@ git commit -m "feat: resolve provider-specific connection settings"
 - Modify: `Tests/ChaosTests/FileProcessorTests.swift`
 - Modify: `Chaos/Services/VisionAPIClient.swift`
 
-- [ ] **Step 1: Add failing invalid-base-URL test**
+- **Step 1: Add failing invalid-base-URL test**
 
 ```swift
 func testHealthCheckRejectsEmptyBaseURL() async {
@@ -187,13 +192,13 @@ func testHealthCheckRejectsEmptyBaseURL() async {
 }
 ```
 
-- [ ] **Step 2: Run test to verify the crash or failure**
+- **Step 2: Run test to verify the crash or failure**
 
 Run: `swift test --filter FileProcessorTests/testHealthCheckRejectsEmptyBaseURL`
 
 Expected: FAIL because the network client force-unwraps an invalid URL.
 
-- [ ] **Step 3: Guard endpoint construction**
+- **Step 3: Guard endpoint construction**
 
 Replace force-unwrapped URL construction in both network methods with:
 
@@ -206,13 +211,13 @@ guard let url = URL(string: "\(baseURL.trimmingSuffix("/"))/chat/completions"),
 }
 ```
 
-- [ ] **Step 4: Run focused tests**
+- **Step 4: Run focused tests**
 
 Run: `swift test --filter FileProcessorTests`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- **Step 5: Commit**
 
 ```bash
 git add Chaos/Services/VisionAPIClient.swift Tests/ChaosTests/FileProcessorTests.swift
@@ -225,7 +230,7 @@ git commit -m "fix: reject invalid provider endpoints"
 - Create: `Chaos/Views/SettingsComponents.swift`
 - Modify: `Chaos/Views/SettingsView.swift`
 
-- [ ] **Step 1: Create stateless presentation components**
+- **Step 1: Create stateless presentation components**
 
 Implement:
 
@@ -256,7 +261,7 @@ struct SettingsConnectionResult: View {
 Use `Theme.canvas`, `Theme.surfaceCard`, `Theme.border`, `Theme.coral`,
 semantic colors, system icons, and readable labels.
 
-- [ ] **Step 2: Recompose SettingsView**
+- **Step 2: Recompose SettingsView**
 
 Replace the grouped form with a `ScrollView` and card stack. Use:
 
@@ -271,13 +276,13 @@ Keep existing directory, output, behavior, save-on-change, and reveal-config
 functionality. Route the provider picker setter through
 `appState.selectProvider(_:)`.
 
-- [ ] **Step 3: Build to verify SwiftUI composition**
+- **Step 3: Build to verify SwiftUI composition**
 
 Run: `swift build`
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add Chaos/Views/SettingsComponents.swift Chaos/Views/SettingsView.swift
@@ -289,7 +294,7 @@ git commit -m "refactor(settings): clarify provider configuration"
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Document Ollama setup**
+- **Step 1: Document Ollama setup**
 
 Add Ollama to the provider table and include:
 
@@ -300,7 +305,7 @@ ollama pull qwen3-vl:2b
 Explain that users install and run Ollama separately, then select `Ollama` in
 Chaos Settings. No API key is required.
 
-- [ ] **Step 2: Run verification**
+- **Step 2: Run verification**
 
 Run:
 
@@ -312,7 +317,7 @@ git diff --check
 
 Expected: all tests pass, no whitespace errors, and the app bundle builds.
 
-- [ ] **Step 3: Launch and visually inspect Settings**
+- **Step 3: Launch and visually inspect Settings**
 
 Run:
 
@@ -323,7 +328,7 @@ open .build/Chaos.app
 Inspect provider switching, API-key visibility, model defaults, custom URL
 visibility, and connection-result readability.
 
-- [ ] **Step 4: Commit**
+- **Step 4: Commit**
 
 ```bash
 git add README.md

@@ -16,7 +16,7 @@ func (d *Desktop) settings(c *ui.Context) {
 		d.providerSettings(c, false)
 		section(c, "Directories", func() {
 			d.directoryRow(c, "Watch", d.watchDir(), d.actions.PickWatchDirectory)
-			d.directoryRow(c, "Output", d.outputDir(), d.actions.PickOutputDirectory)
+			d.directoryRow(c, "Output", d.snapshot.ResolvedOutputDir, d.actions.PickOutputDirectory)
 		})
 		d.namingSettings(c)
 		section(c, "Behavior", func() {
@@ -41,9 +41,6 @@ func (d *Desktop) settings(c *ui.Context) {
 					b := ui.Button(c.Key("appearance-"+name), label).Grow(1).OnClick(func() {
 						d.config.Appearance = name
 						d.save()
-						if d.actions.ApplyAppearance != nil {
-							d.actions.ApplyAppearance(name)
-						}
 					})
 					if current == name {
 						b.Background(c.Theme().Accent.Alpha(.15)).TextColor(c.Theme().Accent)
@@ -54,9 +51,6 @@ func (d *Desktop) settings(c *ui.Context) {
 		})
 		section(c, "Configuration", func() {
 			path := d.snapshot.ConfigPath
-			if path == "" {
-				path = filepath.Join(d.home, "Library", "Application Support", "chaos", "config.json")
-			}
 			ui.Text(c, d.shorten(path)).Font("monospace").Selectable()
 			ui.Button(c, "Reveal config").OnClick(func() { d.reveal(path) })
 		})
@@ -78,6 +72,7 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 			for _, p := range providers {
 				if p.Name == choice {
 					d.config.SetProvider(p.ID)
+					d.advanced = p.CustomURL
 					d.save()
 					provider = p
 					break
@@ -101,9 +96,6 @@ func (d *Desktop) providerSettings(c *ui.Context, onboarding bool) {
 			}
 		}
 		if !onboarding {
-			if provider.CustomURL {
-				d.advanced = true
-			}
 			label := "Advanced options ▸"
 			if d.advanced {
 				label = "Advanced options ▾"

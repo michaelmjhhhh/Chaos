@@ -16,14 +16,10 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
-func readImage(path string) (image.Image, error) {
+func copyImage(path string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	return core.DecodeImage(ctx, path)
-}
-
-func copyImage(path string) error {
-	img, err := readImage(path)
+	img, err := core.DecodeImage(ctx, path)
 	if err != nil {
 		return err
 	}
@@ -34,8 +30,8 @@ func copyImage(path string) error {
 	return mygo.Clipboard.WriteImage(out.Bytes())
 }
 
-func thumbnail(path string) ([]byte, error) {
-	img, err := readImage(path)
+func thumbnail(ctx context.Context, path string) (image.Image, error) {
+	img, err := core.DecodeImage(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +39,7 @@ func thumbnail(path string) ([]byte, error) {
 	scale := min(1.0, 640/float64(max(b.Dx(), b.Dy())))
 	out := image.NewNRGBA(image.Rect(0, 0, max(1, int(float64(b.Dx())*scale)), max(1, int(float64(b.Dy())*scale))))
 	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, draw.Src, nil)
-	var data bytes.Buffer
-	if err = png.Encode(&data, out); err != nil {
-		return nil, err
-	}
-	return data.Bytes(), nil
+	return out, ctx.Err()
 }
 
 func notify(title, body string) error {

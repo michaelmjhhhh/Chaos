@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
+	"syscall"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -26,32 +28,28 @@ func TestACLRefusesSecurityDowngradeAndReleasesNativeAllocation(t *testing.T) {
 			dir := t.TempDir()
 			source := filepath.Join(dir, "source.png")
 			writeTestFile(t, source, []byte("image"))
-			var errno int32
 			freed := false
 			api := darwinACLAPI{
-				get: func(fd int32, kind int32) uintptr {
+				get: func(fd int32, kind int32) (uintptr, syscall.Errno) {
 					if fd < 0 || kind != aclTypeExtended {
 						t.Fatal("invalid ACL arguments")
 					}
-					return 123
+					return 123, 0
 				},
-				set: func(_ string, kind int32, acl uintptr) int32 {
+				set: func(_ string, kind int32, acl uintptr) (int32, syscall.Errno) {
 					if acl != 123 || kind != aclTypeExtended {
 						t.Fatal("wrong ACL passed to destination")
 					}
-					errno = tc.setErr
-					return -1
+					return -1, syscall.Errno(tc.setErr)
 				},
-				getEntry: func(_ uintptr, _ int32, entry *uintptr) int32 {
+				getEntry: func(_ uintptr, _ int32, entry *uintptr) (int32, syscall.Errno) {
 					if tc.hasEntry {
 						*entry = 456
-						return 0
+						return 0, 0
 					}
-					errno = int32(unix.EINVAL)
-					return -1
+					return -1, unix.EINVAL
 				},
-				free:  func(acl uintptr) int32 { freed = acl == 123; return 0 },
-				errno: func() *int32 { return &errno },
+				free: func(acl uintptr) int32 { freed = acl == 123; return 0 },
 			}
 			err := api.copy(source, filepath.Join(dir, "destination.png"))
 			if (err != nil) != tc.wantError {
@@ -65,6 +63,31 @@ func TestACLRefusesSecurityDowngradeAndReleasesNativeAllocation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestACLNativeErrnoSurvivesConcurrentCalls(t *testing.T) {
+	api, err := loadDarwinACL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 16 {
+		wg.Go(func() {
+			for range 500 {
+				acl, err := api.get(-1, aclTypeExtended)
+				if acl != 0 {
+					api.free(acl)
+					t.Error("invalid descriptor returned an ACL")
+					return
+				}
+				if err != unix.EBADF {
+					t.Errorf("native errno changed before observation: %v", err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }
 
 func TestCopyACLReportsNativeDestinationPermissionError(t *testing.T) {

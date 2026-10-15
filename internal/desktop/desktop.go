@@ -1,11 +1,12 @@
-// Package desktop renders Chaos with MyGo's native Go UI. All fields belong to
-// the UI thread. Controller methods enqueue work; they never block a frame.
+// Package desktop renders Chaos with MyGo's native Go UI. Mutable view state
+// belongs to the UI thread. Controller methods enqueue work; they never block a frame.
 package desktop
 
 import (
+	"context"
 	"fmt"
+	"image"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -42,15 +43,13 @@ type Actions struct {
 	RevealPath          func(string)
 	OpenURL             func(string)
 	Quit                func()
-	ApplyAppearance     func(string)
 	ShowWindow          func()
 	Dispatch            func(func())
-	LoadThumbnail       func(string) ([]byte, error)
+	LoadThumbnail       func(context.Context, string) (image.Image, error)
 }
 
 type Desktop struct {
 	activeSince          time.Time
-	thumbnailSlots       chan struct{}
 	controller           Controller
 	actions              Actions
 	snapshot             app.Snapshot
@@ -68,24 +67,38 @@ type Desktop struct {
 	welcome              bool
 	welcomeStep          int
 	advanced             bool
-	notice               string
 	announcement         string
 	announced            string
-	thumbnails           map[string]*ui.Bitmap
-	thumbnailPending     map[string]bool
-	thumbnailOrder       []string
+	thumbnails           map[string]*thumbnailEntry
+	thumbnailUse         uint64
+	thumbnailLoader      *thumbnailLoader
 	now                  func() time.Time
 }
 
 func New(controller Controller, actions Actions) *Desktop {
 	home, _ := os.UserHomeDir()
-	d := &Desktop{thumbnailSlots: make(chan struct{}, 2), controller: controller, actions: actions, home: home, tab: "Dashboard", filter: "All", selected: -1, expanded: map[int]bool{}, thumbnails: map[string]*ui.Bitmap{}, thumbnailPending: map[string]bool{}, now: time.Now}
+	d := &Desktop{
+		controller: controller, actions: actions, home: home,
+		tab: "Dashboard", filter: "All", selected: -1,
+		expanded: make(map[int]bool), thumbnails: make(map[string]*thumbnailEntry), now: time.Now,
+	}
 	if controller != nil {
 		d.snapshot = controller.Snapshot()
 		d.config = d.snapshot.Config
 		d.welcome = !d.snapshot.OnboardingComplete
+		d.advanced = core.ProviderByID(d.config.Provider).CustomURL
 	}
+	d.startThumbnailLoader()
 	return d
+}
+
+// Close cancels thumbnail work and waits for its workers. Call it off the UI
+// thread; queued UI publications become no-ops after cancellation.
+func (d *Desktop) Close() {
+	if loader := d.thumbnailLoader; loader != nil {
+		loader.cancel()
+		loader.workers.Wait()
+	}
 }
 
 // SetSnapshot is called by the shell inside Window.Update, never a worker.
@@ -93,10 +106,15 @@ func (d *Desktop) SetSnapshot(s app.Snapshot) {
 	if s.Revision < d.snapshot.Revision {
 		return
 	}
-	if s.Busy && (!d.snapshot.Busy || (s.CurrentPath != "" && s.CurrentPath != d.snapshot.CurrentPath && s.CurrentStage == "analyzing")) {
+	if s.Busy && (!d.snapshot.Busy || (s.CurrentPath != "" && s.CurrentPath != d.snapshot.CurrentPath && s.CurrentStage == app.StageAnalyzing)) {
 		d.activeSince = d.now()
+		// A later intake can reuse a source path that was already previewed.
+		delete(d.thumbnails, s.CurrentPath)
 	}
 	if !reflect.DeepEqual(s.Config, d.snapshot.Config) {
+		if s.Config.Provider != d.snapshot.Config.Provider {
+			d.advanced = core.ProviderByID(s.Config.Provider).CustomURL
+		}
 		d.config = s.Config
 	}
 	if s.OnboardingComplete {
@@ -106,10 +124,10 @@ func (d *Desktop) SetSnapshot(s app.Snapshot) {
 		d.welcomeStep = 0
 	}
 	if s.CurrentStage != d.snapshot.CurrentStage || s.CurrentFile != d.snapshot.CurrentFile {
-		if s.CurrentStage == "success" {
+		if s.CurrentStage == app.StageSuccess {
 			d.announcement = "Filed as " + s.CurrentFile
 		}
-		if s.CurrentStage == "error" {
+		if s.CurrentStage == app.StageError {
 			d.announcement = "Couldn't file " + s.CurrentFile + ". " + s.Error
 		}
 	}
@@ -200,11 +218,6 @@ func (d *Desktop) tabButton(c *ui.Context, name string) {
 	}
 }
 func (d *Desktop) footer(c *ui.Context) {
-	p := core.ProviderByID(d.config.Provider)
-	model := strings.TrimSpace(d.config.Model)
-	if model == "" {
-		model = p.Model
-	}
 	ui.Row(c).Padding(9, 20).Gap(8).BorderWidth(1, 0, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		color := c.Theme().TextMuted
 		if d.snapshot.APIStatus == "OK" {
@@ -214,7 +227,7 @@ func (d *Desktop) footer(c *ui.Context) {
 			color = c.Theme().Danger
 		}
 		ui.Text(c, "●").TextColor(color).Label("API status " + d.snapshot.APIStatus)
-		ui.Text(c, p.Name+" · "+model).FontSize(11).TextColor(c.Theme().TextMuted).Grow(1).SingleLine()
+		ui.Text(c, providerLabel(d.config)).FontSize(11).TextColor(c.Theme().TextMuted).Grow(1).SingleLine()
 		ui.Text(c, d.status()).FontSize(11).TextColor(c.Theme().TextMuted)
 	})
 }
@@ -242,26 +255,11 @@ func (d *Desktop) save() {
 		d.controller.SaveConfig(d.config)
 	}
 }
-func (d *Desktop) outputDir() string {
-	if d.snapshot.ResolvedOutputDir != "" {
-		return d.snapshot.ResolvedOutputDir
-	}
-	if strings.TrimSpace(d.config.OutputDir) != "" {
-		return d.config.OutputDir
-	}
-	return filepath.Join(d.home, "Desktop", "chaos-output")
-}
 func (d *Desktop) watchDir() string {
 	if d.snapshot.Watching && d.snapshot.ActiveWatchDir != "" {
 		return d.snapshot.ActiveWatchDir
 	}
-	if d.snapshot.ResolvedWatchDir != "" {
-		return d.snapshot.ResolvedWatchDir
-	}
-	if strings.TrimSpace(d.config.WatchDir) != "" {
-		return d.config.WatchDir
-	}
-	return filepath.Join(d.home, "Desktop")
+	return d.snapshot.ResolvedWatchDir
 }
 func (d *Desktop) open(path string) {
 	if path != "" && d.actions.OpenPath != nil {
@@ -298,4 +296,13 @@ func fileName(f core.RecentFile) string {
 		return f.NewName
 	}
 	return f.OriginalName
+}
+
+func providerLabel(cfg core.Config) string {
+	p := core.ProviderByID(cfg.Provider)
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = p.Model
+	}
+	return p.Name + " · " + model
 }

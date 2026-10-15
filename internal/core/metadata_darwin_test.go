@@ -21,7 +21,7 @@ func TestMovePreservesMacExtendedAttributes(t *testing.T) {
 	if err := unix.Setxattr(source, "com.chaos.test-tag", []byte("original-tag"), 0); err != nil {
 		t.Fatal(err)
 	}
-	destination, err := MoveFile(source, filepath.Join(dir, "out"), "tagged")
+	destination, err := MoveFileWithHook(source, filepath.Join(dir, "out"), "tagged", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,10 @@ func TestMovePreservesMacExtendedAttributes(t *testing.T) {
 	if string(value[:n]) != "original-tag" {
 		t.Fatal("metadata lost")
 	}
-	info, _ := os.Stat(destination)
+	info, err := os.Stat(destination)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if info.Mode().Perm() != 0600 {
 		t.Fatal("mode changed")
 	}
@@ -48,21 +51,21 @@ func TestMoveRenameAndRevertPreserveMacACL(t *testing.T) {
 	if !strings.Contains(want, "deny write") {
 		t.Fatalf("test ACL was not installed: %q", want)
 	}
-	destination, err := MoveFile(source, filepath.Join(dir, "out"), "filed")
+	destination, err := MoveFileWithHook(source, filepath.Join(dir, "out"), "filed", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := macACLEntries(t, destination); got != want {
 		t.Fatalf("filed ACL changed: %q != %q", got, want)
 	}
-	destination, err = RenameFile(destination, "renamed")
+	destination, err = RenameFileWithHook(destination, "renamed", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := macACLEntries(t, destination); got != want {
 		t.Fatalf("renamed ACL changed: %q != %q", got, want)
 	}
-	destination, err = RevertFile(destination, source)
+	destination, err = RevertFileWithHook(destination, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +100,7 @@ func TestMovePreservesEmptyACLInInheritingDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	macACLCommand(t, "+a", "everyone allow read,file_inherit", out)
-	destination, err := MoveFile(source, out, "filed")
+	destination, err := MoveFileWithHook(source, out, "filed", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +115,7 @@ func TestMacACLFailurePreservesOriginalAndCleansTemporaryFile(t *testing.T) {
 	writeTestFile(t, source, []byte("original"))
 	macACLCommand(t, "+a", "everyone deny readsecurity", source)
 	t.Cleanup(func() { _ = exec.Command("/bin/chmod", "-N", source).Run() })
-	_, err := MoveFile(source, filepath.Join(dir, "out"), "filed")
+	_, err := MoveFileWithHook(source, filepath.Join(dir, "out"), "filed", nil)
 	if err == nil {
 		t.Fatal("move silently ignored unreadable ACL")
 	}
@@ -147,7 +150,7 @@ func TestMacACLAndFlagsSurviveRejectedJournalWithoutArtifacts(t *testing.T) {
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("rejected move left temporary files: %v, %v", entries, err)
 	}
-	destination, err := MoveFile(source, filepath.Join(dir, "out"), "filed")
+	destination, err := MoveFileWithHook(source, filepath.Join(dir, "out"), "filed", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +194,7 @@ func TestMovePreservesMacCreationDate(t *testing.T) {
 	if err := unix.Stat(source, &before); err != nil {
 		t.Fatal(err)
 	}
-	destination, err := MoveFile(source, filepath.Join(dir, "out"), "dated")
+	destination, err := MoveFileWithHook(source, filepath.Join(dir, "out"), "dated", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

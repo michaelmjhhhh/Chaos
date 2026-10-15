@@ -17,6 +17,30 @@ type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 type Client struct{ HTTP HTTPDoer }
+
+type chatRequest struct {
+	Model     string        `json:"model"`
+	MaxTokens int           `json:"max_tokens"`
+	Stream    bool          `json:"stream"`
+	Messages  []chatMessage `json:"messages"`
+}
+
+type chatMessage struct {
+	Role string `json:"role"`
+	// Chat completions accepts either plain text or an array of content parts.
+	Content any `json:"content"`
+}
+
+type chatContentPart struct {
+	Type     string        `json:"type"`
+	Text     string        `json:"text,omitempty"`
+	ImageURL *chatImageURL `json:"image_url,omitempty"`
+}
+
+type chatImageURL struct {
+	URL string `json:"url"`
+}
+
 type HTTPError struct {
 	Status  int
 	Message string
@@ -28,25 +52,21 @@ func (e *HTTPError) Error() string {
 	}
 	return fmt.Sprintf("provider HTTP %d", e.Status)
 }
-func (c *Client) do(ctx context.Context, method, address, key string, payload any, timeout time.Duration) ([]byte, error) {
+func (c *Client) post(ctx context.Context, address, key string, payload chatRequest, timeout time.Duration) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var body bytes.Buffer
-	if payload != nil {
-		if err := json.NewEncoder(&body).Encode(payload); err != nil {
-			return nil, err
-		}
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
+		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, address, &body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, address, &body)
 	if err != nil {
 		return nil, err
 	}
 	if key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
-	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
+	req.Header.Set("Content-Type", "application/json")
 	client := c.HTTP
 	if client == nil {
 		client = &http.Client{Timeout: timeout, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
@@ -81,8 +101,18 @@ func (c *Client) GenerateSlug(ctx context.Context, image PreparedImage, cfg Reso
 	if cfg.CustomPrompt == "" && cfg.Language == "zh" {
 		user = "Return only the filename slug in Simplified Chinese."
 	}
-	payload := map[string]any{"model": cfg.Model, "max_tokens": 32, "stream": false, "messages": []any{map[string]any{"role": "system", "content": system}, map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": user}, map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:" + image.MIMEType + ";base64," + image.Base64}}}}}}
-	data, err := c.do(ctx, http.MethodPost, address, cfg.APIKey, payload, 30*time.Second)
+	payload := chatRequest{
+		Model:     cfg.Model,
+		MaxTokens: 32,
+		Messages: []chatMessage{
+			{Role: "system", Content: system},
+			{Role: "user", Content: []chatContentPart{
+				{Type: "text", Text: user},
+				{Type: "image_url", ImageURL: &chatImageURL{URL: "data:" + image.MIMEType + ";base64," + image.Base64}},
+			}},
+		},
+	}
+	data, err := c.post(ctx, address, cfg.APIKey, payload, 30*time.Second)
 	if err != nil {
 		return "", err
 	}
@@ -93,13 +123,20 @@ func (c *Client) CheckHealth(ctx context.Context, cfg ResolvedConfig) error {
 	if err != nil {
 		return err
 	}
-	data, err := c.do(ctx, http.MethodPost, address, cfg.APIKey, map[string]any{"model": cfg.Model, "max_tokens": 8, "stream": false, "messages": []any{map[string]string{"role": "user", "content": "Reply with only: ok"}}}, 15*time.Second)
+	data, err := c.post(ctx, address, cfg.APIKey, chatRequest{
+		Model:     cfg.Model,
+		MaxTokens: 8,
+		Messages:  []chatMessage{{Role: "user", Content: "Reply with only: ok"}},
+	}, 15*time.Second)
 	if err != nil {
 		return err
 	}
 	_, err = ParseSlug(data)
 	return err
 }
+
+var ErrEmptyProviderResponse = errors.New("empty response from provider")
+
 func ParseSlug(data []byte) (string, error) {
 	var r struct {
 		Choices []struct {
@@ -133,17 +170,18 @@ func ParseSlug(data []byte) (string, error) {
 			}
 		}
 	}
+	// Preserve the alternate response shape accepted from existing custom endpoints.
 	if len(r.Candidates) > 0 {
-		for _, p := range r.Candidates[0].Content.Parts {
-			if strings.TrimSpace(p.Text) != "" {
-				return strings.TrimSpace(p.Text), nil
+		for _, part := range r.Candidates[0].Content.Parts {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				return text, nil
 			}
 		}
 	}
 	if msg := providerError(data); msg != "" {
 		return "", errors.New(msg)
 	}
-	return "", errors.New("empty response from provider")
+	return "", ErrEmptyProviderResponse
 }
 func providerError(data []byte) string {
 	var v struct {
@@ -163,27 +201,38 @@ func providerError(data []byte) string {
 	return detail.Message
 }
 
-type FriendlyError struct{ Message, Action string }
+type RecoveryAction string
+
+const (
+	RecoveryRetry    RecoveryAction = "retry"
+	RecoverySettings RecoveryAction = "settings"
+	RecoveryInternet RecoveryAction = "internet"
+)
+
+type FriendlyError struct {
+	Message string
+	Action  RecoveryAction
+}
 
 func Friendly(err error, provider string) FriendlyError {
 	var h *HTTPError
 	if errors.As(err, &h) {
 		switch h.Status {
 		case 401, 403:
-			return FriendlyError{"Your API key doesn't look right. Open Settings to re-enter it.", "settings"}
+			return FriendlyError{"Your API key doesn't look right. Open Settings to re-enter it.", RecoverySettings}
 		case 402:
-			return FriendlyError{"Your provider account is out of credit. Add funds, or switch provider in Settings.", "settings"}
+			return FriendlyError{"Your provider account is out of credit. Add funds, or switch provider in Settings.", RecoverySettings}
 		case 404:
-			return FriendlyError{"That model wasn't found. Check the model name in Settings.", "settings"}
+			return FriendlyError{"That model wasn't found. Check the model name in Settings.", RecoverySettings}
 		case 429:
-			return FriendlyError{"The naming service is busy right now. Wait a moment and try again.", "retry"}
+			return FriendlyError{"The naming service is busy right now. Wait a moment and try again.", RecoveryRetry}
 		}
 		if h.Status >= 500 {
-			return FriendlyError{"The naming service had a temporary problem. Try again in a moment.", "retry"}
+			return FriendlyError{"The naming service had a temporary problem. Try again in a moment.", RecoveryRetry}
 		}
 	}
 	if errors.Is(err, context.Canceled) {
-		return FriendlyError{"Processing was cancelled.", "retry"}
+		return FriendlyError{"Processing was cancelled.", RecoveryRetry}
 	}
 	// PathError implements net.Error too, and LinkError can wrap an errno that
 	// does. Keep local file failures out of the internet/Ollama recovery path.
@@ -191,32 +240,30 @@ func Friendly(err error, provider string) FriendlyError {
 	// contain a provider URL or credentials.
 	var pathError *os.PathError
 	if errors.As(err, &pathError) {
-		return FriendlyError{pathError.Error(), "retry"}
+		return FriendlyError{pathError.Error(), RecoveryRetry}
 	}
 	var linkError *os.LinkError
 	if errors.As(err, &linkError) {
-		return FriendlyError{linkError.Error(), "retry"}
+		return FriendlyError{linkError.Error(), RecoveryRetry}
 	}
 	var network net.Error
 	if errors.As(err, &network) {
 		if network.Timeout() {
-			return FriendlyError{"The naming service took too long to respond. Try again.", "retry"}
+			return FriendlyError{"The naming service took too long to respond. Try again.", RecoveryRetry}
 		}
 		if provider == "ollama" {
-			return FriendlyError{"Couldn't reach Ollama on this Mac. Make sure Ollama is running.", "settings"}
+			return FriendlyError{"Couldn't reach Ollama on this Mac. Make sure Ollama is running.", RecoverySettings}
 		}
-		return FriendlyError{"Couldn't reach the naming service. Check your internet, then try again.", "internet"}
+		return FriendlyError{"Couldn't reach the naming service. Check your internet, then try again.", RecoveryInternet}
 	}
-	message := err.Error()
-	lower := strings.ToLower(message)
-	if strings.Contains(lower, "base url") || strings.Contains(lower, "api key") {
-		return FriendlyError{"Check the provider address and API key in Settings.", "settings"}
+	if errors.Is(err, ErrInvalidProviderURL) || errors.Is(err, ErrMissingAPIKey) || errors.Is(err, ErrUnknownProvider) {
+		return FriendlyError{"Check the provider address and API key in Settings.", RecoverySettings}
 	}
-	if strings.Contains(lower, "empty response") {
-		return FriendlyError{"The AI didn't return a name for that image. Try again.", "retry"}
+	if errors.Is(err, ErrEmptyProviderResponse) {
+		return FriendlyError{"The AI didn't return a name for that image. Try again.", RecoveryRetry}
 	}
-	if strings.Contains(lower, "stabil") {
-		return FriendlyError{"That screenshot was still being saved. Try again in a second.", "retry"}
+	if errors.Is(err, ErrImageNotStable) {
+		return FriendlyError{"That screenshot was still being saved. Try again in a second.", RecoveryRetry}
 	}
-	return FriendlyError{message, "retry"}
+	return FriendlyError{err.Error(), RecoveryRetry}
 }

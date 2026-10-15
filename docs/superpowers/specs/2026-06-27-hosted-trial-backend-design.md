@@ -1,5 +1,11 @@
 # Hosted Free-Trial Naming Backend (Agnes AI) — Design
 
+> **Archived — superseded by the native Go application.**
+> This document preserves historical design and implementation steps. Its
+> commands, file paths and task lists are not instructions or outstanding work.
+> See the [archive index](../README.md) and
+> [current compatibility contracts](../../migration/feature-parity.md).
+
 > Historical record: the Agnes AI hosted trial, device identity collection and
 > Vercel build configuration have since been removed. Automatic Git deployments
 > are disabled in `vercel.json`. Hosted behavior below
@@ -7,7 +13,7 @@
 
 
 **Date:** 2026-06-27
-**Status:** Implemented (app + proxy code); pending provisioning & deploy.
+**Original status:** Implemented (app + proxy code); pending provisioning & deploy.
 
 ## Problem
 

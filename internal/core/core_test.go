@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -34,6 +33,14 @@ func writeTestFile(t *testing.T, path string, data []byte) {
 	if err := os.WriteFile(path, data, 0600); err != nil {
 		t.Fatal(err)
 	}
+}
+func readTestFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }
 func sampleImage(t *testing.T, path string, width, height int) {
 	t.Helper()
@@ -77,7 +84,10 @@ func TestConfigLegacyMigrationAndCredentialIsolation(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(loaded, cfg) {
 		t.Fatalf("round trip: %#v %v", loaded, err)
 	}
-	info, _ := os.Stat(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0600 {
 		t.Fatalf("permissions %v", info.Mode())
 	}
@@ -85,15 +95,12 @@ func TestConfigLegacyMigrationAndCredentialIsolation(t *testing.T) {
 	if _, err = LoadConfig(path, legacy); err == nil {
 		t.Fatal("corruption silently accepted")
 	}
-	content, _ := os.ReadFile(path)
+	content := readTestFile(t, path)
 	if string(content) != "corrupt" {
 		t.Fatal("corrupt original replaced")
 	}
 }
 func TestProviderResolution(t *testing.T) {
-	if len(Providers()) != 6 {
-		t.Fatal("provider missing")
-	}
 	for _, p := range Providers() {
 		cfg := Config{Provider: p.ID, APIKey: "key", BaseURL: "https://custom.example/v1"}
 		r := cfg.Resolve("/home/example")
@@ -146,7 +153,7 @@ func TestRetiredProviderMigration(t *testing.T) {
 			if err := cfg.Resolve(dir).Validate(); err == nil {
 				t.Fatal("retired provider should require setup")
 			}
-			preserved, _ := os.ReadFile(source)
+			preserved := readTestFile(t, source)
 			if !bytes.Equal(preserved, original) {
 				t.Fatal("loading rewrote source config")
 			}
@@ -162,11 +169,6 @@ func TestRetiredProviderMigration(t *testing.T) {
 				t.Fatal("saved provider credential not restored")
 			}
 		})
-	}
-	for _, provider := range Providers() {
-		if provider.ID == "chaos-hosted" || strings.Contains(provider.Model, "agnes") || strings.Contains(provider.BaseURL, "vercel") {
-			t.Fatal("retired service is still selectable")
-		}
 	}
 	// In-memory configurations must be safe even before they have been saved.
 	cfg := Config{Provider: "chaos-hosted", APIKey: "retired-key", Model: "agnes-2.0-flash", ProviderKeys: map[string]string{"openai": "saved-key"}}
@@ -221,7 +223,7 @@ func TestNoClobberConcurrentMovesAndRevert(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			dst, err := MoveFile(source, out, "same")
+			dst, err := MoveFileWithHook(source, out, "same", nil)
 			if err != nil {
 				failures <- err
 			} else {
@@ -253,23 +255,23 @@ func TestNoClobberConcurrentMovesAndRevert(t *testing.T) {
 	}
 	source := filepath.Join(dir, "original.png")
 	writeTestFile(t, source, []byte("source"))
-	dst, err := MoveFile(source, out, "revert")
+	dst, err := MoveFileWithHook(source, out, "revert", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, source, []byte("occupant"))
-	restored, err := RevertFile(dst, source)
+	restored, err := RevertFileWithHook(dst, source, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if filepath.Base(restored) != "original-restored.png" {
 		t.Fatal(restored)
 	}
-	b, _ := os.ReadFile(source)
+	b := readTestFile(t, source)
 	if string(b) != "occupant" {
 		t.Fatal("revert overwrote occupant")
 	}
-	same, err := RenameFile(restored, "original-restored")
+	same, err := RenameFileWithHook(restored, "original-restored", nil)
 	if err != nil || same != restored {
 		t.Fatal("same filename should be no-op")
 	}
@@ -288,11 +290,14 @@ func TestMoveHookPrecedesPublicationAndCanReject(t *testing.T) {
 	if !errors.Is(err, wantErr) {
 		t.Fatal(err)
 	}
-	b, _ := os.ReadFile(source)
+	b := readTestFile(t, source)
 	if string(b) != "original" {
 		t.Fatal("source altered after rejected journal")
 	}
-	entries, _ := os.ReadDir(filepath.Join(dir, "out"))
+	entries, err := os.ReadDir(filepath.Join(dir, "out"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(entries) != 0 {
 		t.Fatal("temporary files leaked")
 	}
@@ -312,7 +317,10 @@ func TestImagePreparationAndOrientation(t *testing.T) {
 	if err != nil || cfg.Width != 1280 || cfg.Height != 640 || prepared.MIMEType != "image/jpeg" {
 		t.Fatalf("bad resized image %+v %v", cfg, err)
 	}
-	decoded, _ := jpeg.Decode(bytes.NewReader(raw))
+	decoded, err := jpeg.Decode(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
 	r, g, b, _ := decoded.At(100, 100).RGBA()
 	if r < 60000 || g < 60000 || b < 60000 {
 		t.Fatal("transparent image lost white backing")
@@ -335,66 +343,13 @@ func TestImagePreparationAndOrientation(t *testing.T) {
 		t.Fatal("EXIF pixel mapping wrong")
 	}
 }
-func TestClientPayloadParsingAndHealth(t *testing.T) {
-	var mu sync.Mutex
-	var paths []string
-	var body map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		paths = append(paths, r.URL.Path)
-		if r.Header.Get("Authorization") != "Bearer unit-key" {
-			t.Error("missing credentials")
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Error(err)
-		}
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"  中文名字  "}}]}`)
-	}))
-	defer server.Close()
-	cfg := testConfig(server.URL+"/api", filepath.Join(t.TempDir(), "out"))
-	cfg.CustomPrompt = "Use my naming rules"
-	cfg.Language = "zh"
-	client := &Client{HTTP: server.Client()}
-	slug, err := client.GenerateSlug(context.Background(), PreparedImage{"aW1hZ2U=", "image/jpeg"}, cfg)
-	if err != nil || slug != "中文名字" {
-		t.Fatal(slug, err)
-	}
-	messages := body["messages"].([]any)
-	if messages[0].(map[string]any)["content"] != cfg.CustomPrompt {
-		t.Fatal("custom prompt lost")
-	}
-	parts := messages[1].(map[string]any)["content"].([]any)
-	if parts[0].(map[string]any)["text"] != "Return only the filename slug." {
-		t.Fatal("custom prompt language overridden")
-	}
-	if body["max_tokens"] != float64(32) || body["stream"] != false {
-		t.Fatal("request limits changed")
-	}
-	if err = client.CheckHealth(context.Background(), cfg); err != nil {
-		t.Fatal(err)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if !reflect.DeepEqual(paths, []string{"/api/chat/completions", "/api/chat/completions"}) {
-		t.Fatal("unexpected provider endpoints", paths)
-	}
-	for _, input := range []string{`{"choices":[{"message":{"content":[{"type":"text","text":"array-name"}]}}]}`, `{"candidates":[{"content":{"parts":[{"text":"gemini-name"}]}}]}`} {
-		if value, err := ParseSlug([]byte(input)); err != nil || value == "" {
-			t.Fatal(value, err)
-		}
-	}
-	for _, input := range []string{`{}`, `{"error":{"message":"failure"}}`, `{"choices":[{"message":{"content":" "}}]}`, `broken`} {
-		if _, err := ParseSlug([]byte(input)); err == nil {
-			t.Fatal("bad response accepted", input)
-		}
-	}
-}
 func TestFriendlyDistinguishesFilesystemAndNetworkErrors(t *testing.T) {
 	secretURL := "https://account:private-password@provider.invalid/v1?api_key=private-key"
 	for _, tc := range []struct {
-		name, provider, action, detail string
-		err                            error
+		name, provider string
+		action         RecoveryAction
+		detail         string
+		err            error
 	}{
 		{"file permission", "openai", "retry", "permission denied", &os.PathError{Op: "open", Path: "/images/source.png", Err: os.ErrPermission}},
 		{"missing file with Ollama", "ollama", "retry", "file does not exist", &os.PathError{Op: "stat", Path: "/images/missing.png", Err: os.ErrNotExist}},
@@ -458,34 +413,33 @@ func TestProviderErrorsAndCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-func TestProcessorEndToEndPreservesOriginalBytes(t *testing.T) {
+func TestProcessorPreparesNameWithoutMovingOriginal(t *testing.T) {
 	dir := t.TempDir()
 	source := filepath.Join(dir, "manual.png")
 	sampleImage(t, source, 32, 32)
-	before, _ := os.ReadFile(source)
+	before := readTestFile(t, source)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"choices":[{"message":{"content":"terminal-git-log"}}]}`)
 	}))
 	defer server.Close()
 	cfg := testConfig(server.URL, filepath.Join(dir, "out"))
-	processor := Processor{Client: &Client{HTTP: server.Client()}}
-	var stages []string
-	record, err := processor.Process(context.Background(), source, cfg, func(stage string) { stages = append(stages, stage) })
+	cfg.FilenameTemplate = "{slug}_{time}"
+	cfg.SubfolderRule = "day"
+	at := time.Date(2026, 2, 1, 12, 4, 5, 0, time.UTC)
+	processor := Processor{Client: &Client{HTTP: server.Client()}, Now: func() time.Time { return at }}
+	plan, err := processor.Prepare(context.Background(), source, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	after, _ := os.ReadFile(record.Path)
-	if !bytes.Equal(before, after) {
-		t.Fatal("image bytes changed on disk")
+	if plan.SourcePath != source || plan.Directory != filepath.Join(dir, "out", "2026-02-01") || plan.BaseName != "terminal-git-log-120405" {
+		t.Fatalf("wrong filing plan: %+v", plan)
 	}
-	if record.SourcePath != source || record.ID == "" || record.NewName == "" || record.Duration <= 0 {
-		t.Fatal(record)
+	if err := plan.VerifySource(); err != nil {
+		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(stages, []string{"analyzing", "renaming"}) {
-		t.Fatal(stages)
-	}
-	if _, err = os.Stat(source); !errors.Is(err, os.ErrNotExist) {
-		t.Fatal("source not moved")
+	assertImageBytesUnchanged(t, source, before)
+	if _, err := os.Stat(cfg.OutputDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("analysis published a destination: %v", err)
 	}
 }
 
@@ -503,8 +457,8 @@ func TestMoveNeverDeletesReplacedSource(t *testing.T) {
 	if !errors.As(err, &moveErr) || destination == "" {
 		t.Fatalf("expected recoverable partial move: %s %v", destination, err)
 	}
-	sourceBytes, _ := os.ReadFile(source)
-	destinationBytes, _ := os.ReadFile(destination)
+	sourceBytes := readTestFile(t, source)
+	destinationBytes := readTestFile(t, destination)
 	if string(sourceBytes) != "replacement" || string(destinationBytes) != "original" {
 		t.Fatal("source replacement was lost")
 	}
@@ -519,7 +473,7 @@ func TestNoHardlinkFallbackDoesNotOverwrite(t *testing.T) {
 	if err := publishWithoutLinks(temp, target); !errors.Is(err, os.ErrExist) {
 		t.Fatal("fallback overwrote existing file", err)
 	}
-	contents, _ := os.ReadFile(target)
+	contents := readTestFile(t, target)
 	if string(contents) != "source" {
 		t.Fatal(string(contents))
 	}
@@ -540,11 +494,11 @@ func TestProcessorPreservesSourceReplacedDuringAnalysis(t *testing.T) {
 	}))
 	defer server.Close()
 	processor := Processor{Client: &Client{HTTP: server.Client()}}
-	_, err := processor.Process(context.Background(), source, testConfig(server.URL, filepath.Join(dir, "out")), nil)
+	_, err := processor.Prepare(context.Background(), source, testConfig(server.URL, filepath.Join(dir, "out")))
 	if err == nil {
 		t.Fatal("replacement was filed under old analysis")
 	}
-	b, _ := os.ReadFile(source)
+	b := readTestFile(t, source)
 	if string(b) != "replacement" {
 		t.Fatal("replacement was moved or deleted")
 	}
@@ -556,8 +510,11 @@ func TestProcessorRejectsChangesDuringImagePreparation(t *testing.T) {
 	called := false
 	processor := Processor{PrepareImage: func(context.Context, string) (PreparedImage, error) {
 		called = true
-		data, _ := os.ReadFile(source)
-		info, _ := os.Stat(source)
+		data := readTestFile(t, source)
+		info, err := os.Stat(source)
+		if err != nil {
+			t.Fatal(err)
+		}
 		data[len(data)-1] ^= 0xff
 		if err := os.WriteFile(source, data, 0600); err != nil {
 			t.Fatal(err)

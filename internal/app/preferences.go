@@ -2,17 +2,17 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/michaelmjhhhh/Chaos/internal/core"
 )
 
 // Preferences keeps application lifecycle choices separate from provider settings.
@@ -52,42 +52,7 @@ func savePreferences(path string, p Preferences) error {
 	if err != nil {
 		return err
 	}
-	return atomicWrite(path, append(b, '\n'))
-}
-
-func atomicWrite(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".chaos-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err = os.Rename(f.Name(), path); err != nil {
-		return err
-	}
-	// A successful return means both the file and its directory entry were flushed.
-	d, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer d.Close()
-	if runtime.GOOS == "windows" {
-		return nil
-	}
-	return d.Sync()
+	return core.AtomicWrite(path, append(b, '\n'), 0600)
 }
 
 func legacyPreferences(run commandRunner) Preferences {
@@ -108,13 +73,4 @@ func legacyPreferences(run commandRunner) Preferences {
 	p.OnboardingComplete = read("hasCompletedOnboarding") == "1"
 	p.SessionNumber, _ = strconv.Atoi(read("chaos.sessionNumber"))
 	return p
-}
-
-func newUUID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic(err)
-	}
-	b[6], b[8] = (b[6]&0x0f)|0x40, (b[8]&0x3f)|0x80
-	return strings.ToUpper(fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:]))
 }

@@ -113,7 +113,7 @@ an HTML page. It is not a Go-only frontend template.
 
 The pinned framework module requires **Go 1.27.1**. Chaos uses **Go 1.27.2** for
 the subsequent standard-library security fixes; see the
-[dependency security validation](validation.md#dependency-security-check).
+[dependency security validation](validation-2026-10-13.md#dependency-security-check).
 Native projects use `mygo.json` and a
 Go tool dependency; no npm package is required. `mygo build` defaults to
 `CGO_ENABLED=0`, links app identity/version, and packages macOS app/DMG,

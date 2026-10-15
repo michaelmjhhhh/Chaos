@@ -18,10 +18,19 @@ import (
 )
 
 func main() {
-	dataDir := flag.String("data-dir", "", "use an isolated settings and history directory")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	flag.Parse()
-	if *showVersion {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	launch, err := parseLaunch(os.Args[1:], workingDir)
+	if err == flag.ErrHelp {
+		fmt.Println("Usage: Chaos [--data-dir PATH] [--version] [--] [IMAGES...]")
+		return
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	if launch.version {
 		version := mygo.App.Version()
 		if version == "" {
 			version = "dev"
@@ -29,32 +38,28 @@ func main() {
 		fmt.Println("Chaos " + version + " (MyGo native)")
 		return
 	}
-	customDir := *dataDir != ""
+	customDir := launch.dataDir != ""
 	if !customDir {
 		base, err := os.UserConfigDir()
 		if err != nil {
 			log.Fatal(err)
 		}
-		*dataDir = filepath.Join(base, "chaos")
-	}
-	absDir, err := filepath.Abs(*dataDir)
-	if err != nil {
-		log.Fatal(err)
+		launch.dataDir = filepath.Join(base, "chaos")
 	}
 	mygo.App.SetName("Chaos")
 	if customDir {
 		// QA profiles use a separate single-instance socket from production.
-		sum := sha256.Sum256([]byte(absDir))
+		sum := sha256.Sum256([]byte(launch.dataDir))
 		mygo.App.SetName("Chaos Preview " + hex.EncodeToString(sum[:4]))
 	}
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	controller, err := app.New(app.Options{DataDir: absDir, ImportLegacyPreferences: !customDir, Effects: app.Effects{CopyImage: copyImage, Sound: playSound, Notify: notify}})
+	controller, err := app.New(app.Options{DataDir: launch.dataDir, ImportLegacyPreferences: !customDir, Effects: app.Effects{CopyImage: copyImage, Sound: playSound, Notify: notify}})
 	if err != nil {
 		log.Fatal(err)
 	}
-	runDesktop(controller, flag.Args())
+	runDesktop(controller, launch.files)
 }
 
 func runDesktop(controller *app.Controller, initialFiles []string) {
@@ -64,14 +69,19 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 	var shuttingDown, drained atomic.Bool
 	show := func() {
 		if win != nil {
-			win.Update(func() {}) // tray navigation can change the shared view's selected tab
+			win.Invalidate() // tray navigation can change the shared view's selected tab
 			win.Show()
 			win.Focus()
 		}
 	}
 	mygo.App.OnWindowAllClosed(func() {}) // closing a window keeps the watcher alive
 	mygo.App.OnActivate(func(bool) { show() })
-	mygo.App.OnSecondInstance(func(args []string, wd string) { show() })
+	mygo.App.OnSecondInstance(func(args []string, wd string) {
+		if err := openLaunchFiles(args, wd, controller.ProcessFiles); err != nil {
+			controller.ReportError(err)
+		}
+		show()
+	})
 	mygo.App.OnOpenFile(func(path string) { controller.ProcessFiles([]string{path}); show() })
 	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
 		if drained.Load() {
@@ -81,12 +91,16 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 		if shuttingDown.Swap(true) {
 			return
 		}
+		closingView, closingWindow := view, win
 		go func() {
+			if closingView != nil {
+				closingView.Close()
+			}
 			if err := controller.Close(); err != nil {
 				log.Printf("close history: %v", err)
 			}
-			if win != nil {
-				win.Update(func() { drained.Store(true); mygo.App.Quit() })
+			if closingWindow != nil {
+				closingWindow.Update(func() { drained.Store(true); mygo.App.Quit() })
 			} else {
 				drained.Store(true)
 				mygo.App.Quit()
@@ -113,9 +127,8 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 					}
 				}()
 			},
-			Quit:            mygo.App.Quit,
-			ApplyAppearance: func(appearance string) { mygo.Theme.SetSource(mygo.ThemeSource(appearance)) },
-			ShowWindow:      show,
+			Quit:       mygo.App.Quit,
+			ShowWindow: show,
 			Dispatch: func(fn func()) {
 				if win != nil {
 					win.Update(fn)
@@ -193,7 +206,7 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 						_ = tray.SetIcon(trayIcon(lastWatching), runtime.GOOS == "darwin")
 					}
 				}
-				panel.Update(func() {})
+				panel.Invalidate()
 			})
 		})
 		if s := controller.Snapshot(); s.AutoStart {
@@ -209,6 +222,9 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 		}
 	})
 	if err := mygo.App.Run(); err != nil {
+		if view != nil {
+			view.Close()
+		}
 		_ = controller.Close()
 		log.Fatal(err)
 	}
@@ -258,7 +274,7 @@ func applicationMenu(c *app.Controller, d *desktop.Desktop, w *mygo.Window, show
 		{Role: mygo.RoleEditMenu},
 		{Label: "View", Submenu: []*mygo.MenuItem{{Label: "Dashboard", Accelerator: "CmdOrCtrl+1", Click: selectTab("Dashboard")}, {Label: "Pipeline", Accelerator: "CmdOrCtrl+2", Click: selectTab("Pipeline")}, {Label: "Insights", Accelerator: "CmdOrCtrl+3", Click: selectTab("Insights")}, {Role: mygo.RoleToggleFullScreen}}},
 		{Role: mygo.RoleWindowMenu},
-		{Label: "Help", Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{{Label: "Chaos Help", Accelerator: "CmdOrCtrl+Shift+/", Click: func(*mygo.MenuItem, *mygo.Window) { w.Update(d.ShowHelp); show() }}, {Label: "Replay Welcome Guide", Click: func(*mygo.MenuItem, *mygo.Window) { c.ReplayOnboarding(); w.Update(d.ShowWelcome); show() }}, {Label: "Chaos Website", Click: func(*mygo.MenuItem, *mygo.Window) {
+		{Label: "Help", Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{{Label: "Chaos Help", Accelerator: "CmdOrCtrl+Shift+/", Click: func(*mygo.MenuItem, *mygo.Window) { w.Update(d.ShowHelp); show() }}, {Label: "Replay Welcome Guide", Click: func(*mygo.MenuItem, *mygo.Window) { w.Update(d.ShowWelcome); show() }}, {Label: "Chaos Website", Click: func(*mygo.MenuItem, *mygo.Window) {
 			go mygo.Shell.OpenExternal("https://github.com/michaelmjhhhh/Chaos")
 		}}}},
 	})

@@ -32,42 +32,57 @@ type Options struct {
 	ImportLegacyPreferences bool
 }
 
+type jobKind uint8
+
+const (
+	jobProcess jobKind = iota
+	jobRename
+	jobRevert
+)
+
 type job struct {
-	kind, path, id, name   string
+	kind                   jobKind
+	path, id, name         string
 	watch                  bool
 	batchIndex, batchTotal int
 }
 
 type Controller struct {
-	mu                               sync.Mutex
-	snapshot                         Snapshot
-	onChange                         func(Snapshot)
-	ctx                              context.Context
-	cancel                           context.CancelFunc
-	wg                               sync.WaitGroup
-	closeOnce                        sync.Once
-	closed                           chan struct{}
-	wake, saveWake, watchWake        chan struct{}
-	queue                            []job
-	pending                          map[string]bool
-	activeCancel                     context.CancelFunc
-	activeWatch                      bool
-	watchMu                          sync.Mutex
-	watcher                          *core.Watcher
-	watchCancel                      context.CancelFunc
-	store                            *core.Store
-	processor                        *core.Processor
-	client                           *core.Client
-	effects                          Effects
-	home, dataDir                    string
-	now                              func() time.Time
-	watchInterval                    time.Duration
-	wantWatching                     bool
-	configEdited                     bool
-	settingsRevision, healthRevision uint64
-	closeErr                         error
-	prefs                            Preferences
-	refreshMu                        sync.Mutex
+	mu        sync.Mutex
+	snapshot  Snapshot
+	onChange  func(Snapshot)
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+	closeOnce sync.Once
+	closed    chan struct{}
+	closeErr  error
+
+	wake, saveWake, watchWake chan struct{}
+	queue                     []job
+	pending                   map[string]bool
+	activeCancel              context.CancelFunc
+	activeWatch               bool
+
+	watchMu       sync.Mutex
+	watcher       *core.Watcher
+	watchCancel   context.CancelFunc
+	watchInterval time.Duration
+	wantWatching  bool
+
+	store         *core.Store
+	processor     *core.Processor
+	client        *core.Client
+	effects       Effects
+	home, dataDir string
+	now           func() time.Time
+	refreshMu     sync.Mutex
+
+	configRevision, savedConfigRevision           uint64
+	preferencesRevision, savedPreferencesRevision uint64
+	healthRevision                                uint64
+	storageErrors                                 storageErrors
+	prefs                                         Preferences
 }
 
 func New(opts Options) (*Controller, error) {
@@ -88,7 +103,7 @@ func New(opts Options) (*Controller, error) {
 		opts.Client = &core.Client{}
 	}
 	if opts.Processor == nil {
-		opts.Processor = &core.Processor{Client: opts.Client}
+		opts.Processor = &core.Processor{Client: opts.Client, Now: opts.Now}
 	}
 	if err := os.MkdirAll(opts.DataDir, 0700); err != nil {
 		return nil, err
@@ -113,17 +128,46 @@ func New(opts Options) (*Controller, error) {
 		return nil, fmt.Errorf("open screenshot history: %w", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &Controller{ctx: ctx, cancel: cancel, closed: make(chan struct{}), wake: make(chan struct{}, 1), saveWake: make(chan struct{}, 1), pending: make(map[string]bool), store: db, processor: opts.Processor, client: opts.Client, effects: opts.Effects, home: opts.Home, dataDir: opts.DataDir, now: opts.Now, watchInterval: opts.WatchInterval, prefs: prefs}
+	c := &Controller{
+		ctx:           ctx,
+		cancel:        cancel,
+		closed:        make(chan struct{}),
+		wake:          make(chan struct{}, 1),
+		saveWake:      make(chan struct{}, 1),
+		watchWake:     make(chan struct{}, 1),
+		pending:       make(map[string]bool),
+		store:         db,
+		processor:     opts.Processor,
+		client:        opts.Client,
+		effects:       opts.Effects,
+		home:          opts.Home,
+		dataDir:       opts.DataDir,
+		now:           opts.Now,
+		watchInterval: opts.WatchInterval,
+		prefs:         prefs,
+	}
 	r := cfg.Resolve(opts.Home)
-	c.snapshot = Snapshot{Config: cfg, APIStatus: "N/A", WatcherStatus: "Paused", StartedAt: opts.Now(), SessionNumber: prefs.SessionNumber, AutoStart: prefs.AutoStart, OnboardingComplete: prefs.OnboardingComplete, DataDir: opts.DataDir, ConfigPath: cfgPath, ResolvedWatchDir: r.WatchDir, ResolvedOutputDir: r.OutputDir}
-	if err := errors.Join(cfgErr, prefErr); err != nil {
-		c.snapshot.StorageError = err.Error()
+	c.snapshot = Snapshot{
+		Config:             cfg,
+		APIStatus:          "N/A",
+		WatcherStatus:      "Paused",
+		AutoStart:          prefs.AutoStart,
+		OnboardingComplete: prefs.OnboardingComplete,
+		ConfigPath:         cfgPath,
+		ResolvedWatchDir:   r.WatchDir,
+		ResolvedOutputDir:  r.OutputDir,
+	}
+	if cfgErr != nil {
+		c.storageErrors.config = cfgErr.Error()
+	}
+	if prefErr != nil {
+		c.storageErrors.preferences = prefErr.Error()
 	}
 	if err := c.recoverOperations(); err != nil {
-		c.snapshot.StorageError = err.Error()
+		c.storageErrors.recovery = err.Error()
 	}
+	c.snapshot.StorageError = c.storageErrors.message()
 	c.refresh()
-	c.watchWake = make(chan struct{}, 1)
 	c.wg.Add(3)
 	go c.worker()
 	go c.settingsWorker()
@@ -147,134 +191,67 @@ func (c *Controller) SetOnChange(fn func(Snapshot)) {
 	}
 }
 
-func (c *Controller) change(fn func(*Snapshot)) {
+// change publishes only when the mutation changes visible state. Internal revision
+// acknowledgements may still happen when the callback returns false.
+func (c *Controller) change(fn func(*Snapshot) bool) bool {
 	c.mu.Lock()
-	fn(&c.snapshot)
+	if !fn(&c.snapshot) {
+		c.mu.Unlock()
+		return false
+	}
+	c.snapshot.StorageError = c.storageErrors.message()
 	c.snapshot.Revision++
-	s := cloneSnapshot(c.snapshot)
 	cb := c.onChange
+	var snapshot Snapshot
+	if cb != nil {
+		snapshot = cloneSnapshot(c.snapshot)
+	}
 	c.mu.Unlock()
 	if cb != nil {
-		cb(s)
+		cb(snapshot)
 	}
+	return true
 }
 
-func (c *Controller) report(err error) {
+func (c *Controller) ReportError(err error) {
 	if err == nil {
 		return
 	}
-	c.change(func(s *Snapshot) { s.Error = err.Error(); s.RecoveryAction = "none" })
+	c.change(func(s *Snapshot) bool {
+		message := err.Error()
+		if s.Error == message && s.RecoveryAction == "" {
+			return false
+		}
+		s.Error, s.RecoveryAction = message, ""
+		return true
+	})
 }
 
-func (c *Controller) ReportError(err error) { c.report(err) }
 func (c *Controller) ReportWarning(message string) {
-	c.change(func(s *Snapshot) { s.Warning = message })
+	c.change(func(s *Snapshot) bool {
+		if s.Warning == message {
+			return false
+		}
+		s.Warning = message
+		return true
+	})
 }
+
 func (c *Controller) DismissError() {
-	c.change(func(s *Snapshot) { s.Error = ""; s.Warning = ""; s.RecoveryAction = "" })
+	c.change(func(s *Snapshot) bool {
+		if s.Error == "" && s.Warning == "" && s.RecoveryAction == "" {
+			return false
+		}
+		s.Error, s.Warning, s.RecoveryAction = "", "", ""
+		return true
+	})
 }
 
-func (c *Controller) SaveConfig(cfg core.Config) {
-	if c.ctx.Err() != nil {
-		return
-	}
-	c.mu.Lock()
-	old := c.snapshot.Config.Resolve(c.home)
-	c.snapshot.Config = cloneConfig(cfg)
-	c.configEdited = true
-	r := cfg.Resolve(c.home)
-	c.snapshot.ResolvedWatchDir = r.WatchDir
-	c.snapshot.ResolvedOutputDir = r.OutputDir
-	c.settingsRevision++
-	if old.Provider.ID != r.Provider.ID || old.APIKey != r.APIKey || old.Model != r.Model || old.BaseURL != r.BaseURL {
-		c.snapshot.APIStatus = "N/A"
-		c.snapshot.HealthError = ""
-		c.healthRevision++
-	}
-	changedWatch := c.snapshot.Watching && old.WatchDir != r.WatchDir
-	c.mu.Unlock()
-	c.signal(c.saveWake)
-	c.change(func(*Snapshot) {})
-	if changedWatch {
-		c.signal(c.watchWake)
-	}
-}
-
-func (c *Controller) SetAutoStart(enabled bool) {
-	c.mu.Lock()
-	c.prefs.AutoStart = enabled
-	c.snapshot.AutoStart = enabled
-	c.settingsRevision++
-	c.mu.Unlock()
-	c.signal(c.saveWake)
-	c.change(func(*Snapshot) {})
-}
-
-func (c *Controller) CompleteOnboarding(start bool) {
-	c.mu.Lock()
-	c.prefs.OnboardingComplete = true
-	c.snapshot.OnboardingComplete = true
-	c.settingsRevision++
-	c.mu.Unlock()
-	c.signal(c.saveWake)
-	c.change(func(*Snapshot) {})
-	if start {
-		c.Start()
-	}
-}
-
-func (c *Controller) ReplayOnboarding() {
-	c.mu.Lock()
-	c.prefs.OnboardingComplete = false
-	c.snapshot.OnboardingComplete = false
-	c.settingsRevision++
-	c.mu.Unlock()
-	c.signal(c.saveWake)
-	c.change(func(*Snapshot) {})
-}
-
-func (c *Controller) signal(ch chan struct{}) {
+func signal(ch chan struct{}) {
 	select {
 	case ch <- struct{}{}:
 	default:
 	}
-}
-
-func (c *Controller) settingsWorker() {
-	defer c.wg.Done()
-	for {
-		select {
-		case <-c.saveWake:
-			c.saveSettings()
-		case <-c.ctx.Done():
-			c.saveSettings()
-			return
-		}
-	}
-}
-
-func (c *Controller) saveSettings() {
-	c.mu.Lock()
-	cfg := cloneConfig(c.snapshot.Config)
-	p := c.prefs
-	revision := c.settingsRevision
-	configEdited := c.configEdited
-	c.mu.Unlock()
-	// Only explicit edits save provider configuration. Opening a corrupt file must
-	// never replace it with defaults during shutdown.
-	if revision == 0 {
-		return
-	}
-	var configErr error
-	if configEdited {
-		configErr = core.SaveConfig(filepath.Join(c.dataDir, "config.json"), cfg)
-	}
-	err := errors.Join(configErr, savePreferences(filepath.Join(c.dataDir, "preferences.json"), p))
-	c.change(func(s *Snapshot) {
-		if err != nil {
-			s.StorageError = "Save settings: " + err.Error()
-		}
-	})
 }
 
 func (c *Controller) Start() {
@@ -282,7 +259,7 @@ func (c *Controller) Start() {
 	c.wantWatching = true
 	c.mu.Unlock()
 	if c.ctx.Err() == nil {
-		c.signal(c.watchWake)
+		signal(c.watchWake)
 	}
 }
 func (c *Controller) Stop() {
@@ -290,7 +267,7 @@ func (c *Controller) Stop() {
 	c.wantWatching = false
 	c.mu.Unlock()
 	c.cancelWatchedJobs()
-	c.signal(c.watchWake)
+	signal(c.watchWake)
 }
 
 func (c *Controller) watchWorker() {
@@ -334,32 +311,37 @@ func (c *Controller) startWatcher() {
 		c.cancelWatchedJobs()
 	}
 	if err := r.Validate(); err != nil {
-		c.change(func(s *Snapshot) {
+		c.change(func(s *Snapshot) bool {
 			s.WatcherStatus = "Needs attention"
 			s.Error = err.Error()
-			s.RecoveryAction = "settings"
+			s.RecoveryAction = core.RecoverySettings
+			return true
 		})
 		return
 	}
-	c.change(func(s *Snapshot) { s.WatcherStatus = "Starting" })
+	c.change(func(s *Snapshot) bool {
+		s.WatcherStatus = "Starting"
+		return true
+	})
 	ctx, cancel := context.WithCancel(c.ctx)
 	w := &core.Watcher{Directory: r.WatchDir, Interval: c.watchInterval}
-	if err := w.Start(ctx, func(path string) { c.enqueue([]string{path}, true) }, func(err error) { c.report(fmt.Errorf("watch folder: %w", err)) }); err != nil {
+	if err := w.Start(ctx, func(path string) { c.enqueue([]string{path}, true) }, func(err error) { c.ReportError(fmt.Errorf("watch folder: %w", err)) }); err != nil {
 		cancel()
-		c.change(func(s *Snapshot) {
+		c.change(func(s *Snapshot) bool {
 			s.WatcherStatus = "Needs attention"
 			s.Error = err.Error()
-			s.RecoveryAction = "settings"
+			s.RecoveryAction = core.RecoverySettings
+			return true
 		})
 		return
 	}
 	c.watcher = w
 	c.watchCancel = cancel
-	c.change(func(s *Snapshot) {
+	c.change(func(s *Snapshot) bool {
 		s.Watching = true
 		s.WatcherStatus = "Watching"
 		s.ActiveWatchDir = r.WatchDir
-		s.WatcherStartedAt = c.now()
+		return true
 	})
 	c.CheckHealth()
 }
@@ -373,12 +355,15 @@ func (c *Controller) stopWatcherLocked() {
 		c.watcher.Stop()
 		c.watcher = nil
 	}
-	c.change(func(s *Snapshot) {
+	c.change(func(s *Snapshot) bool {
+		if !s.Watching && s.WatcherStatus == "Paused" && s.ActiveWatchDir == "" && s.QueueLength == len(c.queue) {
+			return false
+		}
 		s.Watching = false
 		s.WatcherStatus = "Paused"
 		s.ActiveWatchDir = ""
-		s.WatcherStartedAt = time.Time{}
 		s.QueueLength = len(c.queue)
+		return true
 	})
 }
 
@@ -418,9 +403,7 @@ func canonicalInput(path string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", errors.New("select a regular image file")
 	}
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png", ".jpg", ".jpeg", ".webp", ".heic":
-	default:
+	if !core.AcceptsImage(path) {
 		return "", errors.New("choose PNG, JPEG, HEIC, or WebP images")
 	}
 	return path, nil
@@ -444,30 +427,34 @@ func (c *Controller) enqueue(paths []string, watch bool) {
 		}
 		accepted = append(accepted, path)
 	}
-	c.mu.Lock()
-	if c.ctx.Err() != nil || (watch && !c.wantWatching) {
-		c.mu.Unlock()
-		return
-	}
-	var added []job
-	for _, p := range accepted {
-		if !c.pending[p] {
-			c.pending[p] = true
-			added = append(added, job{kind: "process", path: p, watch: watch})
+	changed := c.change(func(s *Snapshot) bool {
+		if c.ctx.Err() != nil || (watch && !c.wantWatching) {
+			return false
 		}
+		var added []job
+		for _, p := range accepted {
+			if !c.pending[p] {
+				c.pending[p] = true
+				added = append(added, job{kind: jobProcess, path: p, watch: watch})
+			}
+		}
+		for i := range added {
+			added[i].batchIndex, added[i].batchTotal = i+1, len(added)
+		}
+		c.queue = append(c.queue, added...)
+		queueChanged := s.QueueLength != len(c.queue)
+		s.QueueLength = len(c.queue)
+		warningChanged := false
+		if len(rejected) > 0 {
+			warning := strings.Join(rejected, "\n")
+			warningChanged = warning != s.Warning
+			s.Warning = warning
+		}
+		return len(added) > 0 || queueChanged || warningChanged
+	})
+	if changed {
+		signal(c.wake)
 	}
-	for i := range added {
-		added[i].batchIndex = i + 1
-		added[i].batchTotal = len(added)
-	}
-	c.queue = append(c.queue, added...)
-	c.snapshot.QueueLength = len(c.queue)
-	if len(rejected) > 0 {
-		c.snapshot.Warning = strings.Join(rejected, "\n")
-	}
-	c.mu.Unlock()
-	c.change(func(*Snapshot) {})
-	c.signal(c.wake)
 }
 
 func (c *Controller) findRecord(id string) (core.RecentFile, bool) {
@@ -490,29 +477,38 @@ func (c *Controller) Retry(id string) {
 }
 
 func (c *Controller) RetryAll() {
-	s := c.Snapshot()
-	paths := make([]string, 0)
-	for _, r := range s.RecentFiles {
-		if r.IsError && r.SourcePath != "" {
-			if info, err := os.Stat(r.SourcePath); err == nil && info.Mode().IsRegular() {
-				paths = append(paths, r.SourcePath)
+	c.run(func() {
+		snapshot := c.Snapshot()
+		var paths []string
+		for _, record := range snapshot.RecentFiles {
+			if c.ctx.Err() != nil {
+				return
+			}
+			if record.IsError && record.SourcePath != "" {
+				if info, err := os.Stat(record.SourcePath); err == nil && info.Mode().IsRegular() {
+					paths = append(paths, record.SourcePath)
+				}
 			}
 		}
-	}
-	c.ProcessFiles(paths)
+		c.enqueue(paths, false)
+	})
 }
 
 func (c *Controller) Rename(id, name string) {
-	c.enqueueMutation(job{kind: "rename", id: id, name: name})
+	c.enqueueMutation(job{kind: jobRename, id: id, name: name})
 }
-func (c *Controller) Revert(id string) { c.enqueueMutation(job{kind: "revert", id: id}) }
+func (c *Controller) Revert(id string) { c.enqueueMutation(job{kind: jobRevert, id: id}) }
 func (c *Controller) enqueueMutation(j job) {
-	c.mu.Lock()
-	if c.ctx.Err() == nil {
+	if c.change(func(s *Snapshot) bool {
+		if c.ctx.Err() != nil {
+			return false
+		}
 		c.queue = append(c.queue, j)
+		s.QueueLength = len(c.queue)
+		return true
+	}) {
+		signal(c.wake)
 	}
-	c.mu.Unlock()
-	c.signal(c.wake)
 }
 
 func (c *Controller) worker() {
@@ -544,18 +540,21 @@ func (c *Controller) worker() {
 			c.activeWatch = j.watch
 			c.snapshot.QueueLength = len(c.queue)
 			c.mu.Unlock()
-			if j.kind == "process" {
+			switch j.kind {
+			case jobProcess:
 				c.process(ctx, j)
-			} else {
+			case jobRename, jobRevert:
 				c.mutate(ctx, j)
+			default:
+				c.ReportError(fmt.Errorf("unknown queued operation: %d", j.kind))
 			}
 			cancel()
-			c.mu.Lock()
-			delete(c.pending, j.path)
-			c.activeCancel = nil
-			c.activeWatch = false
-			c.mu.Unlock()
-			c.change(func(s *Snapshot) { s.Busy = false; s.BatchIndex = 0; s.BatchTotal = 0; s.QueueLength = len(c.queue) })
+			c.change(func(s *Snapshot) bool {
+				delete(c.pending, j.path)
+				c.activeCancel, c.activeWatch = nil, false
+				s.Busy, s.BatchIndex, s.BatchTotal, s.QueueLength = false, 0, 0, len(c.queue)
+				return true
+			})
 		}
 	}
 }
@@ -568,41 +567,45 @@ func (c *Controller) run(fn func()) {
 	}
 	c.wg.Add(1)
 	c.mu.Unlock()
-	go func() { defer c.wg.Done(); fn() }()
+	go func() {
+		defer c.wg.Done()
+		fn()
+	}()
 }
 
 func (c *Controller) CheckHealth() { c.run(c.checkHealth) }
 
 func (c *Controller) checkHealth() {
-	c.mu.Lock()
-	cfg := c.snapshot.Config.Resolve(c.home)
-	c.healthRevision++
-	rev := c.healthRevision
-	c.mu.Unlock()
-	c.change(func(s *Snapshot) {
-		if rev != c.healthRevision {
-			return
+	var cfg core.ResolvedConfig
+	var revision uint64
+	if !c.change(func(s *Snapshot) bool {
+		if c.ctx.Err() != nil {
+			return false
 		}
-		s.APIStatus = "Checking…"
-		s.HealthError = ""
-	})
+		cfg = s.Config.Resolve(c.home)
+		c.healthRevision++
+		revision = c.healthRevision
+		s.APIStatus, s.HealthError = "Checking…", ""
+		return true
+	}) {
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()
 	err := cfg.Validate()
 	if err == nil {
 		err = c.client.CheckHealth(ctx, cfg)
 	}
-	c.change(func(s *Snapshot) {
-		if rev != c.healthRevision {
-			return
+	c.change(func(s *Snapshot) bool {
+		if revision != c.healthRevision || c.ctx.Err() != nil {
+			return false
 		}
 		if err == nil {
-			s.APIStatus = "OK"
-			s.HealthError = ""
+			s.APIStatus, s.HealthError = "OK", ""
 		} else {
-			s.APIStatus = "FAIL"
-			s.HealthError = core.Friendly(err, cfg.Provider.ID).Message
+			s.APIStatus, s.HealthError = "FAIL", core.Friendly(err, cfg.Provider.ID).Message
 		}
+		return true
 	})
 }
 
@@ -613,23 +616,32 @@ func (c *Controller) refresh() {
 	defer cancel()
 	recent, err := c.store.Recent(ctx, 500)
 	if err != nil {
-		c.change(func(s *Snapshot) { s.StorageError = "Read history: " + err.Error() })
+		c.change(func(*Snapshot) bool {
+			message := "Read history: " + err.Error()
+			changed := c.storageErrors.historyRead != message
+			c.storageErrors.historyRead = message
+			return changed
+		})
 		return
 	}
 	insights, err := c.store.Insights(ctx, c.now(), time.Local)
 	if err != nil {
-		c.change(func(s *Snapshot) { s.StorageError = "Read insights: " + err.Error() })
+		c.change(func(*Snapshot) bool {
+			message := "Read insights: " + err.Error()
+			changed := c.storageErrors.historyRead != message
+			c.storageErrors.historyRead = message
+			return changed
+		})
 		return
 	}
-	c.change(func(s *Snapshot) {
+	c.change(func(s *Snapshot) bool {
 		s.RecentFiles = recent
 		s.Insights = insights
-		s.HistoryRevision++
-		s.Processed = insights.TodayProcessed
+		c.storageErrors.historyRead = ""
 		s.Successes = insights.TodaySuccesses
 		s.Errors = insights.TodayErrors
 		s.AvgLatency = insights.TodayAvgDuration
-		s.P95Latency = insights.TodayP95Duration
+		return true
 	})
 }
 
