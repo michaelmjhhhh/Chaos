@@ -440,3 +440,27 @@ func TestWarningCanBeDismissedWithoutAnError(t *testing.T) {
 		t.Fatal("dismissed warning still rendered")
 	}
 }
+
+func TestFiledToastUndoAndTemplateTokens(t *testing.T) {
+	d, ctl := fixture()
+	tt := ui.NewTester(d.View, 1000, 800)
+	s := d.snapshot
+	s.Revision = 3
+	s.CurrentFile, s.CurrentPath, s.CurrentStage = "meeting-notes.png", "/out/meeting-notes.png", "success"
+	d.SetSnapshot(s)
+	tt.Frame()
+	if !tt.HasText("Filed as meeting-notes.png") {
+		t.Fatalf("filing toast missing: %q", tt.Texts())
+	}
+	click(t, tt, "Undo")
+	expectCall(t, ctl, "revert:one")
+
+	d.SelectTab("Settings")
+	tt = ui.NewTester(d.View, 1000, 1400)
+	d.config.FilenameTemplate = "{slug}"
+	tt.Frame()
+	click(t, tt, "{date}")
+	if ctl.saved.FilenameTemplate != "{slug}{date}" {
+		t.Fatalf("token chip did not extend the template: %q", ctl.saved.FilenameTemplate)
+	}
+}
