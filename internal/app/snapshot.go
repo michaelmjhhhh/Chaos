@@ -1,9 +1,15 @@
 package app
 
-import (
-	"time"
+import "github.com/michaelmjhhhh/Chaos/internal/core"
 
-	"github.com/michaelmjhhhh/Chaos/internal/core"
+type ProcessingStage string
+
+const (
+	StageAnalyzing ProcessingStage = "analyzing"
+	StageRenaming  ProcessingStage = "renaming"
+	StageClipboard ProcessingStage = "clipboard"
+	StageSuccess   ProcessingStage = "success"
+	StageError     ProcessingStage = "error"
 )
 
 // Snapshot is a detached, immutable copy suitable for handing to the UI thread.
@@ -14,29 +20,22 @@ type Snapshot struct {
 	Insights                                             core.Insights
 	Watching                                             bool
 	WatcherStatus, ActiveWatchDir                        string
-	CurrentFile, CurrentPath, CurrentStage               string
+	CurrentFile, CurrentPath                             string
+	CurrentStage                                         ProcessingStage
 	APIStatus, Error, Warning, StorageError, HealthError string
 	RecoveryAction                                       core.RecoveryAction
 	Busy                                                 bool
 	BatchIndex, BatchTotal, QueueLength                  int
-	Processed, Successes, Errors                         int
-	AvgLatency, P95Latency                               float64
-	Latencies                                            []float64
-	HourlyThroughput                                     [24]int
-	SuccessWindow                                        []float64
-	WatcherStartedAt, StartedAt                          time.Time
-	SessionNumber                                        int
+	Successes, Errors                                    int
+	AvgLatency                                           float64
 	AutoStart, OnboardingComplete                        bool
-	HistoryRevision                                      uint64
-	DataDir, ConfigPath                                  string
+	ConfigPath                                           string
 	ResolvedWatchDir, ResolvedOutputDir                  string
 }
 
 func cloneSnapshot(s Snapshot) Snapshot {
 	s.Config = cloneConfig(s.Config)
 	s.RecentFiles = append([]core.RecentFile(nil), s.RecentFiles...)
-	s.Latencies = append([]float64(nil), s.Latencies...)
-	s.SuccessWindow = append([]float64(nil), s.SuccessWindow...)
 	s.Insights.Daily = cloneMap(s.Insights.Daily)
 	s.Insights.TopCategories = append([]core.Labeled(nil), s.Insights.TopCategories...)
 	s.Insights.FileTypes = append([]core.Labeled(nil), s.Insights.FileTypes...)

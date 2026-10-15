@@ -17,16 +17,16 @@ func (c *Controller) process(ctx context.Context, j job) {
 	c.mu.Lock()
 	cfg := c.snapshot.Config.Resolve(c.home)
 	c.mu.Unlock()
-	c.change(func(s *Snapshot) {
+	c.change(func(s *Snapshot) bool {
 		s.Busy = true
 		s.CurrentFile = filepath.Base(j.path)
 		s.CurrentPath = j.path
-		s.CurrentStage = "analyzing"
+		s.CurrentStage = StageAnalyzing
 		s.BatchIndex = j.batchIndex
 		s.BatchTotal = j.batchTotal
 		s.Error = ""
 		s.RecoveryAction = ""
-		s.HourlyThroughput[start.Hour()]++
+		return true
 	})
 	plan, err := c.processor.Prepare(ctx, j.path, cfg)
 	if err != nil {
@@ -43,12 +43,15 @@ func (c *Controller) process(ctx context.Context, j job) {
 		OriginalName: filepath.Base(j.path),
 		Timestamp:    c.now(),
 	}
-	op := operation{Kind: "insert", Record: record, Source: j.path, SHA256: plan.SourceSHA256}
+	op := operation{Kind: operationInsert, Record: record, Source: j.path, SHA256: plan.SourceSHA256}
 	if err = plan.VerifySource(); err != nil {
 		c.failed(ctx, j, cfg, err)
 		return
 	}
-	c.change(func(s *Snapshot) { s.CurrentStage = "renaming" })
+	c.change(func(s *Snapshot) bool {
+		s.CurrentStage = StageRenaming
+		return true
+	})
 	destination, err := core.MoveFileWithHook(j.path, plan.Directory, plan.BaseName, func(destination string) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -67,13 +70,19 @@ func (c *Controller) process(ctx context.Context, j job) {
 		// source or flushing the directory fails. Do not invent a failed row.
 		if op.Destination != "" {
 			if _, statErr := os.Stat(op.Destination); statErr == nil {
-				c.change(func(s *Snapshot) {
-					s.StorageError = "A filing needs recovery: " + err.Error()
-					s.CurrentStage = "error"
+				c.change(func(s *Snapshot) bool {
+					c.storageErrors.recovery = "A filing needs recovery: " + err.Error()
+					s.CurrentStage = StageError
+					return true
 				})
 				return
 			}
-			_ = c.removeOperation(op.Record.ID)
+			if cleanupErr := c.removeOperation(op.Record.ID); cleanupErr != nil {
+				c.change(func(*Snapshot) bool {
+					c.storageErrors.recovery = "Remove incomplete filing: " + cleanupErr.Error()
+					return true
+				})
+			}
 		}
 		c.failed(ctx, j, cfg, err)
 		return
@@ -85,32 +94,29 @@ func (c *Controller) process(ctx context.Context, j job) {
 		err = c.commitOperation(op)
 	}
 	if err != nil {
-		c.change(func(s *Snapshot) {
-			s.StorageError = "The image was filed, but history needs recovery: " + err.Error()
+		c.change(func(s *Snapshot) bool {
+			c.storageErrors.recovery = "The image was filed, but history needs recovery: " + err.Error()
 			s.CurrentPath = destination
 			s.CurrentFile = filepath.Base(destination)
-			s.CurrentStage = "error"
+			s.CurrentStage = StageError
+			return true
 		})
 		return
 	}
-	c.change(func(s *Snapshot) {
+	c.change(func(s *Snapshot) bool {
 		s.CurrentPath = destination
 		s.CurrentFile = filepath.Base(destination)
-		s.CurrentStage = "success"
+		s.CurrentStage = StageSuccess
 		s.Error = ""
-		s.Latencies = append(s.Latencies, op.Record.Duration)
-		if len(s.Latencies) > 100 {
-			s.Latencies = s.Latencies[len(s.Latencies)-100:]
-		}
-		s.SuccessWindow = append(s.SuccessWindow, 1)
-		if len(s.SuccessWindow) > 100 {
-			s.SuccessWindow = s.SuccessWindow[len(s.SuccessWindow)-100:]
-		}
+		return true
 	})
 	c.refresh()
 	var warnings []string
 	if cfg.CopyToClipboard && c.effects.CopyImage != nil {
-		c.change(func(s *Snapshot) { s.CurrentStage = "clipboard" })
+		c.change(func(s *Snapshot) bool {
+			s.CurrentStage = StageClipboard
+			return true
+		})
 		if err := c.effects.CopyImage(destination); err != nil {
 			warnings = append(warnings, "Image filed; clipboard copy failed: "+err.Error())
 		}
@@ -125,16 +131,23 @@ func (c *Controller) process(ctx context.Context, j job) {
 			warnings = append(warnings, "Image filed; notification unavailable: "+err.Error())
 		}
 	}
-	c.change(func(s *Snapshot) {
-		s.CurrentStage = "success"
+	c.change(func(s *Snapshot) bool {
+		changed := s.CurrentStage != StageSuccess
+		s.CurrentStage = StageSuccess
 		if len(warnings) > 0 {
-			s.Warning = strings.Join(warnings, "\n")
+			message := strings.Join(warnings, "\n")
+			changed = changed || s.Warning != message
+			s.Warning = message
 		}
+		return changed
 	})
 }
 
 func (c *Controller) cancelled() {
-	c.change(func(s *Snapshot) { s.CurrentStage = ""; s.CurrentFile = ""; s.CurrentPath = "" })
+	c.change(func(s *Snapshot) bool {
+		s.CurrentStage, s.CurrentFile, s.CurrentPath = "", "", ""
+		return true
+	})
 }
 
 func (c *Controller) failed(ctx context.Context, j job, cfg core.ResolvedConfig, err error) {
@@ -143,21 +156,25 @@ func (c *Controller) failed(ctx context.Context, j job, cfg core.ResolvedConfig,
 		return
 	}
 	friendly := core.Friendly(err, cfg.Provider.ID)
-	r := core.RecentFile{ID: core.NewID(), OriginalName: filepath.Base(j.path), SourcePath: j.path, Timestamp: c.now(), IsError: true, ErrorMessage: friendly.Message}
+	r := core.RecentFile{
+		ID:           core.NewID(),
+		OriginalName: filepath.Base(j.path),
+		SourcePath:   j.path,
+		Timestamp:    c.now(),
+		IsError:      true,
+		ErrorMessage: friendly.Message,
+	}
 	writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	writeErr := c.store.Insert(writeCtx, r)
-	c.change(func(s *Snapshot) {
+	c.change(func(s *Snapshot) bool {
 		s.Error = friendly.Message
 		s.RecoveryAction = friendly.Action
-		s.CurrentStage = "error"
-		s.SuccessWindow = append(s.SuccessWindow, 0)
-		if len(s.SuccessWindow) > 100 {
-			s.SuccessWindow = s.SuccessWindow[len(s.SuccessWindow)-100:]
-		}
+		s.CurrentStage = StageError
 		if writeErr != nil {
-			s.StorageError = "Save failed attempt: " + writeErr.Error()
+			c.storageErrors.historyWrite = "Save failed attempt: " + writeErr.Error()
 		}
+		return true
 	})
 	if writeErr == nil {
 		c.refresh()
@@ -172,7 +189,7 @@ func (c *Controller) failed(ctx context.Context, j job, cfg core.ResolvedConfig,
 func (c *Controller) mutate(ctx context.Context, j job) {
 	r, ok := c.findRecord(j.id)
 	if !ok {
-		c.report(errors.New("that history entry is no longer available"))
+		c.ReportError(errors.New("that history entry is no longer available"))
 		return
 	}
 	if r.IsError || r.Path == "" {
@@ -181,13 +198,16 @@ func (c *Controller) mutate(ctx context.Context, j job) {
 	if ctx.Err() != nil {
 		return
 	}
-	c.change(func(s *Snapshot) { s.Busy = true })
-	op := operation{Kind: "update", Record: r, Source: r.Path}
-	if j.kind == "revert" {
-		op.Kind = "delete"
+	c.change(func(s *Snapshot) bool {
+		s.Busy = true
+		return true
+	})
+	op := operation{Kind: operationUpdate, Record: r, Source: r.Path}
+	if j.kind == jobRevert {
+		op.Kind = operationDelete
 	}
 	if err := op.fingerprint(); err != nil {
-		c.report(fmt.Errorf("that image is no longer where Chaos left it: %w", err))
+		c.ReportError(fmt.Errorf("that image is no longer where Chaos left it: %w", err))
 		return
 	}
 	hook := func(destination string) error {
@@ -196,7 +216,7 @@ func (c *Controller) mutate(ctx context.Context, j job) {
 		op.Record.NewName = filepath.Base(destination)
 		// Suppress the restored filename before publication, so Undo never
 		// triggers the watcher to immediately file it again.
-		if j.kind == "revert" {
+		if j.kind == jobRevert {
 			c.watchMu.Lock()
 			if c.watcher != nil {
 				c.watcher.Suppress(destination)
@@ -207,25 +227,29 @@ func (c *Controller) mutate(ctx context.Context, j job) {
 	}
 	var destination string
 	var err error
-	if j.kind == "revert" {
+	switch j.kind {
+	case jobRevert:
 		destination, err = core.RevertFileWithHook(r.Path, r.SourcePath, hook)
-	} else {
+	case jobRename:
 		if strings.TrimSpace(j.name) == "" {
 			return
 		}
 		destination, err = core.RenameFileWithHook(r.Path, j.name, hook)
+	default:
+		c.ReportError(fmt.Errorf("unknown history mutation: %d", j.kind))
+		return
 	}
 	if err != nil {
-		c.report(err)
+		c.ReportError(err)
 		return
 	}
 	if destination == r.Path {
-		if j.kind == "revert" {
+		if j.kind == jobRevert {
 			writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			err := c.store.Delete(writeCtx, r.ID)
 			cancel()
 			if err != nil {
-				c.report(err)
+				c.ReportError(err)
 			} else {
 				c.refresh()
 			}
@@ -236,9 +260,18 @@ func (c *Controller) mutate(ctx context.Context, j job) {
 	op.Record.Path = destination
 	op.Record.NewName = filepath.Base(destination)
 	if err = c.commitOperation(op); err != nil {
-		c.change(func(s *Snapshot) { s.StorageError = "History change needs recovery: " + err.Error() })
+		c.change(func(s *Snapshot) bool {
+			c.storageErrors.recovery = "History change needs recovery: " + err.Error()
+			return true
+		})
 		return
 	}
-	c.change(func(s *Snapshot) { s.Error = ""; s.CurrentStage = ""; s.CurrentFile = ""; s.CurrentPath = "" })
+	c.change(func(s *Snapshot) bool {
+		s.Error = ""
+		s.CurrentStage = ""
+		s.CurrentFile = ""
+		s.CurrentPath = ""
+		return true
+	})
 	c.refresh()
 }

@@ -106,7 +106,7 @@ func (d *Desktop) hero(c *ui.Context) {
 				ui.Image(c, b).Height(150).FillWidth().Fit(ui.Contain).Radius(8).Label("Current image")
 			}
 			ui.Text(c, d.snapshot.CurrentFile).Font("monospace").FontSize(15).Selectable()
-			stage := d.snapshot.CurrentStage
+			stage := string(d.snapshot.CurrentStage)
 			if stage == "" {
 				stage = "Ready"
 			}
