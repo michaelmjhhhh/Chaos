@@ -18,10 +18,19 @@ import (
 )
 
 func main() {
-	dataDir := flag.String("data-dir", "", "use an isolated settings and history directory")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	flag.Parse()
-	if *showVersion {
+	workingDir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	launch, err := parseLaunch(os.Args[1:], workingDir)
+	if err == flag.ErrHelp {
+		fmt.Println("Usage: Chaos [--data-dir PATH] [--version] [--] [IMAGES...]")
+		return
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+	if launch.version {
 		version := mygo.App.Version()
 		if version == "" {
 			version = "dev"
@@ -29,32 +38,28 @@ func main() {
 		fmt.Println("Chaos " + version + " (MyGo native)")
 		return
 	}
-	customDir := *dataDir != ""
+	customDir := launch.dataDir != ""
 	if !customDir {
 		base, err := os.UserConfigDir()
 		if err != nil {
 			log.Fatal(err)
 		}
-		*dataDir = filepath.Join(base, "chaos")
-	}
-	absDir, err := filepath.Abs(*dataDir)
-	if err != nil {
-		log.Fatal(err)
+		launch.dataDir = filepath.Join(base, "chaos")
 	}
 	mygo.App.SetName("Chaos")
 	if customDir {
 		// QA profiles use a separate single-instance socket from production.
-		sum := sha256.Sum256([]byte(absDir))
+		sum := sha256.Sum256([]byte(launch.dataDir))
 		mygo.App.SetName("Chaos Preview " + hex.EncodeToString(sum[:4]))
 	}
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	controller, err := app.New(app.Options{DataDir: absDir, ImportLegacyPreferences: !customDir, Effects: app.Effects{CopyImage: copyImage, Sound: playSound, Notify: notify}})
+	controller, err := app.New(app.Options{DataDir: launch.dataDir, ImportLegacyPreferences: !customDir, Effects: app.Effects{CopyImage: copyImage, Sound: playSound, Notify: notify}})
 	if err != nil {
 		log.Fatal(err)
 	}
-	runDesktop(controller, flag.Args())
+	runDesktop(controller, launch.files)
 }
 
 func runDesktop(controller *app.Controller, initialFiles []string) {
@@ -71,7 +76,12 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 	}
 	mygo.App.OnWindowAllClosed(func() {}) // closing a window keeps the watcher alive
 	mygo.App.OnActivate(func(bool) { show() })
-	mygo.App.OnSecondInstance(func(args []string, wd string) { show() })
+	mygo.App.OnSecondInstance(func(args []string, wd string) {
+		if err := openLaunchFiles(args, wd, controller.ProcessFiles); err != nil {
+			controller.ReportError(err)
+		}
+		show()
+	})
 	mygo.App.OnOpenFile(func(path string) { controller.ProcessFiles([]string{path}); show() })
 	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
 		if drained.Load() {
