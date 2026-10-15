@@ -2,7 +2,7 @@ package core
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -44,34 +44,49 @@ func (i Insights) PeakHour() int {
 	return hour
 }
 func (i Insights) TimeSaved() time.Duration { return time.Duration(i.Successes) * 30 * time.Second }
-func (s *Store) Insights(ctx context.Context, now time.Time, location *time.Location) (Insights, error) {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return Insights{}, err
-	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT `+historyColumns+` FROM processed_images`)
-	if err != nil {
-		return Insights{}, err
-	}
-	records, err := readRecords(rows)
-	closeErr := rows.Close()
-	if err != nil {
-		return Insights{}, err
-	}
-	if closeErr != nil {
-		return Insights{}, closeErr
-	}
-	result := ComputeInsights(records, now, location)
-	if err = tx.Commit(); err != nil {
-		return Insights{}, err
-	}
-	return result, nil
+
+type insightRecord struct {
+	OriginalName string
+	NewName      string
+	Timestamp    time.Time
+	Duration     float64
+	IsError      bool
 }
 
-// ComputeInsights applies timezone rules in Go so historical daylight-saving
+func (s *Store) Insights(ctx context.Context, now time.Time, location *time.Location) (Insights, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT originalName,newName,CAST(timestamp AS TEXT),duration,isError FROM processed_images`)
+	if err != nil {
+		return Insights{}, err
+	}
+	defer rows.Close()
+	var records []insightRecord
+	for rows.Next() {
+		var record insightRecord
+		var timestamp string
+		if err := rows.Scan(&record.OriginalName, &record.NewName, &timestamp, &record.Duration, &record.IsError); err != nil {
+			return Insights{}, err
+		}
+		var err error
+		record.Timestamp, err = parseTimestamp(timestamp)
+		if err != nil {
+			return Insights{}, fmt.Errorf("history image %q: %w", record.OriginalName, err)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return Insights{}, err
+	}
+	// The SELECT is a consistent snapshot on its own. Release the store's only
+	// connection before sorting and computing statistics from these values.
+	if err := rows.Close(); err != nil {
+		return Insights{}, err
+	}
+	return computeInsights(records, now, location), nil
+}
+
+// computeInsights applies timezone rules in Go so historical daylight-saving
 // offsets are independent of the host SQLite build's localtime implementation.
-func ComputeInsights(files []RecentFile, now time.Time, location *time.Location) Insights {
+func computeInsights(files []insightRecord, now time.Time, location *time.Location) Insights {
 	if location == nil {
 		location = time.Local
 	}

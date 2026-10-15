@@ -193,15 +193,15 @@ func TestFullHistoryBeyondRecentLimitAndDSTAnalytics(t *testing.T) {
 func TestAnalyticsCalendarBoundsAndEmpty(t *testing.T) {
 	loc := time.FixedZone("UTC+8", 8*3600)
 	now := time.Date(2026, 2, 1, 1, 0, 0, 0, loc)
-	files := []RecentFile{{Timestamp: time.Date(2026, 1, 31, 17, 0, 0, 0, time.UTC), Duration: 1}, {Timestamp: time.Date(2026, 1, 31, 15, 0, 0, 0, time.UTC), Duration: 2}, {Timestamp: time.Date(2026, 3, 1, 1, 0, 0, 0, loc), Duration: 3}}
-	insight := ComputeInsights(files, now, loc)
+	files := []insightRecord{{Timestamp: time.Date(2026, 1, 31, 17, 0, 0, 0, time.UTC), Duration: 1}, {Timestamp: time.Date(2026, 1, 31, 15, 0, 0, 0, time.UTC), Duration: 2}, {Timestamp: time.Date(2026, 3, 1, 1, 0, 0, 0, loc), Duration: 3}}
+	insight := computeInsights(files, now, loc)
 	if insight.ThisMonth != 1 || insight.LastMonth != 1 || insight.CurrentStreak != 2 {
 		t.Fatal(insight)
 	}
 	if delta := insight.MonthOverMonth(); delta == nil || *delta != 0 {
 		t.Fatal(delta)
 	}
-	empty := ComputeInsights(nil, now, loc)
+	empty := computeInsights(nil, now, loc)
 	if empty.SuccessRate() != 0 || empty.PeakHour() != -1 || empty.MonthOverMonth() != nil || empty.CurrentStreak != 0 {
 		t.Fatal(empty)
 	}
