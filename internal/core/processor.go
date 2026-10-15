@@ -147,6 +147,9 @@ func (p *Processor) Process(ctx context.Context, source string, cfg ResolvedConf
 	plan.Record.NewName = filepath.Base(dst)
 	return plan.Record, nil
 }
+
+var ErrImageNotStable = errors.New("image did not stabilize before processing")
+
 func WaitUntilStable(ctx context.Context, path string, attempts int, interval time.Duration) error {
 	var previous os.FileInfo
 	for i := 0; i < attempts; i++ {
@@ -169,5 +172,5 @@ func WaitUntilStable(ctx context.Context, path string, attempts int, interval ti
 		case <-timer.C:
 		}
 	}
-	return errors.New("image did not stabilize before processing")
+	return ErrImageNotStable
 }

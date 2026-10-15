@@ -16,7 +16,7 @@ type Snapshot struct {
 	WatcherStatus, ActiveWatchDir                        string
 	CurrentFile, CurrentPath, CurrentStage               string
 	APIStatus, Error, Warning, StorageError, HealthError string
-	RecoveryAction                                       string
+	RecoveryAction                                       core.RecoveryAction
 	Busy                                                 bool
 	BatchIndex, BatchTotal, QueueLength                  int
 	Processed, Successes, Errors                         int

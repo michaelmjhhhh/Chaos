@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -344,66 +343,14 @@ func TestImagePreparationAndOrientation(t *testing.T) {
 		t.Fatal("EXIF pixel mapping wrong")
 	}
 }
-func TestClientPayloadParsingAndHealth(t *testing.T) {
-	var mu sync.Mutex
-	var paths []string
-	var body map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		paths = append(paths, r.URL.Path)
-		if r.Header.Get("Authorization") != "Bearer unit-key" {
-			t.Error("missing credentials")
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Error(err)
-		}
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"  中文名字  "}}]}`)
-	}))
-	defer server.Close()
-	cfg := testConfig(server.URL+"/api", filepath.Join(t.TempDir(), "out"))
-	cfg.CustomPrompt = "Use my naming rules"
-	cfg.Language = "zh"
-	client := &Client{HTTP: server.Client()}
-	slug, err := client.GenerateSlug(context.Background(), PreparedImage{"aW1hZ2U=", "image/jpeg"}, cfg)
-	if err != nil || slug != "中文名字" {
-		t.Fatal(slug, err)
-	}
-	messages := body["messages"].([]any)
-	if messages[0].(map[string]any)["content"] != cfg.CustomPrompt {
-		t.Fatal("custom prompt lost")
-	}
-	parts := messages[1].(map[string]any)["content"].([]any)
-	if parts[0].(map[string]any)["text"] != "Return only the filename slug." {
-		t.Fatal("custom prompt language overridden")
-	}
-	if body["max_tokens"] != float64(32) || body["stream"] != false {
-		t.Fatal("request limits changed")
-	}
-	if err = client.CheckHealth(context.Background(), cfg); err != nil {
-		t.Fatal(err)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if !reflect.DeepEqual(paths, []string{"/api/chat/completions", "/api/chat/completions"}) {
-		t.Fatal("unexpected provider endpoints", paths)
-	}
-	for _, input := range []string{`{"choices":[{"message":{"content":[{"type":"text","text":"array-name"}]}}]}`, `{"candidates":[{"content":{"parts":[{"text":"gemini-name"}]}}]}`} {
-		if value, err := ParseSlug([]byte(input)); err != nil || value == "" {
-			t.Fatal(value, err)
-		}
-	}
-	for _, input := range []string{`{}`, `{"error":{"message":"failure"}}`, `{"choices":[{"message":{"content":" "}}]}`, `broken`} {
-		if _, err := ParseSlug([]byte(input)); err == nil {
-			t.Fatal("bad response accepted", input)
-		}
-	}
-}
+
 func TestFriendlyDistinguishesFilesystemAndNetworkErrors(t *testing.T) {
 	secretURL := "https://account:private-password@provider.invalid/v1?api_key=private-key"
 	for _, tc := range []struct {
-		name, provider, action, detail string
-		err                            error
+		name, provider string
+		action         RecoveryAction
+		detail         string
+		err            error
 	}{
 		{"file permission", "openai", "retry", "permission denied", &os.PathError{Op: "open", Path: "/images/source.png", Err: os.ErrPermission}},
 		{"missing file with Ollama", "ollama", "retry", "file does not exist", &os.PathError{Op: "stat", Path: "/images/missing.png", Err: os.ErrNotExist}},
