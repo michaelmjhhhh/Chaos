@@ -95,7 +95,8 @@ The tests cover more than 500 records, DST boundaries, streaks and percentiles.
 
 The preview ZIP script was executed in an isolated fixture with controlled
 build/sign/archive commands. A mismatched explicit version failed before the
-build, and both omitted and matching versions used `mygo.json`.
+build, and both omitted and matching versions used `mygo.json`. The real script
+then built and verified `dist/Chaos-v1.1.0-arm64.zip` successfully.
 
 ## Historical dependency security check — 2026-10-13
 
