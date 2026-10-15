@@ -13,6 +13,34 @@ import (
 	"time"
 )
 
+var (
+	ErrUnsupportedProvider = errors.New("unsupported provider; choose a provider in Settings")
+	ErrMissingAPIKey       = errors.New("API key not configured")
+	ErrInvalidBaseURL      = errors.New("invalid provider base URL")
+	ErrEmptyResponse       = errors.New("empty response from provider")
+	ErrImageNotStable      = errors.New("image did not stabilize before processing")
+	ErrResponseTooLarge    = errors.New("response exceeds size limit")
+)
+
+type chatRequest struct {
+	Model     string        `json:"model"`
+	MaxTokens int           `json:"max_tokens"`
+	Stream    bool          `json:"stream"`
+	Messages  []chatMessage `json:"messages"`
+}
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content any    `json:"content"` // The API accepts a string or a list of content parts.
+}
+type chatPart struct {
+	Type     string        `json:"type"`
+	Text     string        `json:"text,omitempty"`
+	ImageURL *chatImageURL `json:"image_url,omitempty"`
+}
+type chatImageURL struct {
+	URL string `json:"url"`
+}
+
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -66,6 +94,9 @@ func (c *Client) do(ctx context.Context, method, address, key string, payload an
 	return data, nil
 }
 func (c *Client) GenerateSlug(ctx context.Context, image PreparedImage, cfg ResolvedConfig) (string, error) {
+	if err := cfg.validateProvider(); err != nil {
+		return "", err
+	}
 	if image.Base64 == "" {
 		return "", errors.New("image is empty")
 	}
@@ -81,7 +112,13 @@ func (c *Client) GenerateSlug(ctx context.Context, image PreparedImage, cfg Reso
 	if cfg.CustomPrompt == "" && cfg.Language == "zh" {
 		user = "Return only the filename slug in Simplified Chinese."
 	}
-	payload := map[string]any{"model": cfg.Model, "max_tokens": 32, "stream": false, "messages": []any{map[string]any{"role": "system", "content": system}, map[string]any{"role": "user", "content": []any{map[string]any{"type": "text", "text": user}, map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:" + image.MIMEType + ";base64," + image.Base64}}}}}}
+	payload := chatRequest{Model: cfg.Model, MaxTokens: 32, Messages: []chatMessage{
+		{Role: "system", Content: system},
+		{Role: "user", Content: []chatPart{
+			{Type: "text", Text: user},
+			{Type: "image_url", ImageURL: &chatImageURL{URL: "data:" + image.MIMEType + ";base64," + image.Base64}},
+		}},
+	}}
 	data, err := c.do(ctx, http.MethodPost, address, cfg.APIKey, payload, 30*time.Second)
 	if err != nil {
 		return "", err
@@ -89,11 +126,14 @@ func (c *Client) GenerateSlug(ctx context.Context, image PreparedImage, cfg Reso
 	return ParseSlug(data)
 }
 func (c *Client) CheckHealth(ctx context.Context, cfg ResolvedConfig) error {
+	if err := cfg.validateProvider(); err != nil {
+		return err
+	}
 	address, err := endpoint(cfg.BaseURL, "chat/completions")
 	if err != nil {
 		return err
 	}
-	data, err := c.do(ctx, http.MethodPost, address, cfg.APIKey, map[string]any{"model": cfg.Model, "max_tokens": 8, "stream": false, "messages": []any{map[string]string{"role": "user", "content": "Reply with only: ok"}}}, 15*time.Second)
+	data, err := c.do(ctx, http.MethodPost, address, cfg.APIKey, chatRequest{Model: cfg.Model, MaxTokens: 8, Messages: []chatMessage{{Role: "user", Content: "Reply with only: ok"}}}, 15*time.Second)
 	if err != nil {
 		return err
 	}
@@ -143,7 +183,7 @@ func ParseSlug(data []byte) (string, error) {
 	if msg := providerError(data); msg != "" {
 		return "", errors.New(msg)
 	}
-	return "", errors.New("empty response from provider")
+	return "", ErrEmptyResponse
 }
 func providerError(data []byte) string {
 	var v struct {
@@ -163,27 +203,39 @@ func providerError(data []byte) string {
 	return detail.Message
 }
 
-type FriendlyError struct{ Message, Action string }
+type RecoveryAction string
+
+const (
+	RecoveryNone     RecoveryAction = ""
+	RecoverySettings RecoveryAction = "settings"
+	RecoveryRetry    RecoveryAction = "retry"
+	RecoveryInternet RecoveryAction = "internet"
+)
+
+type FriendlyError struct {
+	Message string
+	Action  RecoveryAction
+}
 
 func Friendly(err error, provider string) FriendlyError {
 	var h *HTTPError
 	if errors.As(err, &h) {
 		switch h.Status {
 		case 401, 403:
-			return FriendlyError{"Your API key doesn't look right. Open Settings to re-enter it.", "settings"}
+			return FriendlyError{"Your API key doesn't look right. Open Settings to re-enter it.", RecoverySettings}
 		case 402:
-			return FriendlyError{"Your provider account is out of credit. Add funds, or switch provider in Settings.", "settings"}
+			return FriendlyError{"Your provider account is out of credit. Add funds, or switch provider in Settings.", RecoverySettings}
 		case 404:
-			return FriendlyError{"That model wasn't found. Check the model name in Settings.", "settings"}
+			return FriendlyError{"That model wasn't found. Check the model name in Settings.", RecoverySettings}
 		case 429:
-			return FriendlyError{"The naming service is busy right now. Wait a moment and try again.", "retry"}
+			return FriendlyError{"The naming service is busy right now. Wait a moment and try again.", RecoveryRetry}
 		}
 		if h.Status >= 500 {
-			return FriendlyError{"The naming service had a temporary problem. Try again in a moment.", "retry"}
+			return FriendlyError{"The naming service had a temporary problem. Try again in a moment.", RecoveryRetry}
 		}
 	}
 	if errors.Is(err, context.Canceled) {
-		return FriendlyError{"Processing was cancelled.", "retry"}
+		return FriendlyError{"Processing was cancelled.", RecoveryRetry}
 	}
 	// PathError implements net.Error too, and LinkError can wrap an errno that
 	// does. Keep local file failures out of the internet/Ollama recovery path.
@@ -191,32 +243,33 @@ func Friendly(err error, provider string) FriendlyError {
 	// contain a provider URL or credentials.
 	var pathError *os.PathError
 	if errors.As(err, &pathError) {
-		return FriendlyError{pathError.Error(), "retry"}
+		return FriendlyError{pathError.Error(), RecoveryRetry}
 	}
 	var linkError *os.LinkError
 	if errors.As(err, &linkError) {
-		return FriendlyError{linkError.Error(), "retry"}
+		return FriendlyError{linkError.Error(), RecoveryRetry}
 	}
 	var network net.Error
 	if errors.As(err, &network) {
 		if network.Timeout() {
-			return FriendlyError{"The naming service took too long to respond. Try again.", "retry"}
+			return FriendlyError{"The naming service took too long to respond. Try again.", RecoveryRetry}
 		}
 		if provider == "ollama" {
-			return FriendlyError{"Couldn't reach Ollama on this Mac. Make sure Ollama is running.", "settings"}
+			return FriendlyError{"Couldn't reach Ollama on this Mac. Make sure Ollama is running.", RecoverySettings}
 		}
-		return FriendlyError{"Couldn't reach the naming service. Check your internet, then try again.", "internet"}
+		return FriendlyError{"Couldn't reach the naming service. Check your internet, then try again.", RecoveryInternet}
 	}
-	message := err.Error()
-	lower := strings.ToLower(message)
-	if strings.Contains(lower, "base url") || strings.Contains(lower, "api key") {
-		return FriendlyError{"Check the provider address and API key in Settings.", "settings"}
+	if errors.Is(err, ErrUnsupportedProvider) {
+		return FriendlyError{ErrUnsupportedProvider.Error(), RecoverySettings}
 	}
-	if strings.Contains(lower, "empty response") {
-		return FriendlyError{"The AI didn't return a name for that image. Try again.", "retry"}
+	if errors.Is(err, ErrInvalidBaseURL) || errors.Is(err, ErrMissingAPIKey) {
+		return FriendlyError{"Check the provider address and API key in Settings.", RecoverySettings}
 	}
-	if strings.Contains(lower, "stabil") {
-		return FriendlyError{"That screenshot was still being saved. Try again in a second.", "retry"}
+	if errors.Is(err, ErrEmptyResponse) {
+		return FriendlyError{"The AI didn't return a name for that image. Try again.", RecoveryRetry}
 	}
-	return FriendlyError{message, "retry"}
+	if errors.Is(err, ErrImageNotStable) {
+		return FriendlyError{"That screenshot was still being saved. Try again in a second.", RecoveryRetry}
+	}
+	return FriendlyError{err.Error(), RecoveryRetry}
 }

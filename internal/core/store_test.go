@@ -192,3 +192,75 @@ func TestAnalyticsCalendarBoundsAndEmpty(t *testing.T) {
 		t.Fatal(empty)
 	}
 }
+
+func TestLegacyDateBoundariesAndNegativeFraction(t *testing.T) {
+	for _, tc := range []struct{ seconds, want string }{{"-63145526400", "0000-01-01T00:00:00Z"}, {"252423993599.75", "9999-12-31T23:59:59.75Z"}, {"-0.25", "2000-12-31T23:59:59.75Z"}, {"-978307200.25", "1969-12-31T23:59:59.75Z"}} {
+		t.Run(tc.seconds, func(t *testing.T) {
+			dir := t.TempDir()
+			legacy := filepath.Join(dir, "history.json")
+			writeTestFile(t, legacy, []byte(fmt.Sprintf(`[{"id":"valid","timestamp":%s,"result":{"success":{}}}]`, tc.seconds)))
+			s, err := OpenStore(filepath.Join(dir, "history.sqlite"), legacy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			got, err := s.Recent(context.Background(), 10)
+			if err != nil || len(got) != 1 {
+				t.Fatal(got, err)
+			}
+			if at := got[0].Timestamp.Format(time.RFC3339Nano); at != tc.want {
+				t.Fatalf("got %s want %s", at, tc.want)
+			}
+		})
+	}
+}
+func TestInsightsFallBackCalendarAndDurationDistribution(t *testing.T) {
+	s := openTestStore(t)
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n, tc := range []struct {
+		at, name string
+		duration float64
+		failed   bool
+	}{
+		{"2026-11-01T03:30:00Z", "terminal-first.png", 1, false},
+		{"2026-11-01T05:30:00Z", "terminal-fast.jpg", 2, false},
+		{"2026-11-01T06:30:00Z", "terminal-slow.jpg", 20, false},
+		{"2026-11-01T07:30:00Z", "ignored-failure.webp", 999, true},
+		{"2026-10-30T16:00:00Z", "browser.png", 0, false},
+		{"2026-09-30T16:00:00Z", "browser.png", 4, false},
+	} {
+		at, err := time.Parse(time.RFC3339, tc.at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = s.Insert(context.Background(), RecentFile{ID: fmt.Sprint(n), Timestamp: at, NewName: tc.name, Duration: tc.duration, IsError: tc.failed}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.Insights(context.Background(), time.Date(2026, 11, 1, 12, 0, 0, 0, loc), loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TotalProcessed != 6 || got.Successes != 5 || got.Errors != 1 || got.TodayProcessed != 3 || got.TodaySuccesses != 2 || got.TodayErrors != 1 || got.ThisMonth != 3 || got.LastMonth != 2 {
+		t.Fatalf("calendar totals: %+v", got)
+	}
+	if got.CurrentStreak != 3 || got.LongestStreak != 3 || got.Hourly[1] != 2 || got.Hourly[2] != 1 || got.Daily["2026-10-31"] != 1 {
+		t.Fatalf("DST calendar: %+v", got)
+	}
+	if got.AvgDuration != 6.75 || got.P95Duration != 20 || got.TodayAvgDuration != 11 || got.TodayP95Duration != 20 || got.Fastest.Name != "terminal-first.png" || got.Slowest.Name != "terminal-slow.jpg" {
+		t.Fatalf("duration stats: %+v", got)
+	}
+	if got.TopCategories[0] != (Labeled{"terminal", 3}) || got.TopCategories[1] != (Labeled{"browser", 2}) || got.FileTypes[0] != (Labeled{"png", 3}) || got.FileTypes[1] != (Labeled{"jpg", 2}) {
+		t.Fatal("category/type aggregation", got.TopCategories, got.FileTypes)
+	}
+}
+func TestDurationStatsPercentileAndInputOwnership(t *testing.T) {
+	values := []float64{20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}
+	avg, p95 := DurationStats(values)
+	if avg != 10.5 || p95 != 19 || values[0] != 20 || values[19] != 1 {
+		t.Fatal(avg, p95, values)
+	}
+}

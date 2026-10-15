@@ -122,31 +122,6 @@ func (p *Processor) Prepare(ctx context.Context, source string, cfg ResolvedConf
 	plan.BaseName = RenderName(cfg.FilenameTemplate, Sanitize(slug), at)
 	return plan, nil
 }
-func (p *Processor) Process(ctx context.Context, source string, cfg ResolvedConfig, onStage func(string)) (RecentFile, error) {
-	if onStage != nil {
-		onStage("analyzing")
-	}
-	plan, err := p.Prepare(ctx, source, cfg)
-	if err != nil {
-		return RecentFile{}, err
-	}
-	if err = ctx.Err(); err != nil {
-		return RecentFile{}, err
-	}
-	if onStage != nil {
-		onStage("renaming")
-	}
-	if err = plan.VerifySource(); err != nil {
-		return RecentFile{}, err
-	}
-	dst, err := MoveFileWithHook(source, plan.Directory, plan.BaseName, func(string) error { return plan.VerifySource() })
-	if err != nil {
-		return RecentFile{}, err
-	}
-	plan.Record.Path = dst
-	plan.Record.NewName = filepath.Base(dst)
-	return plan.Record, nil
-}
 func WaitUntilStable(ctx context.Context, path string, attempts int, interval time.Duration) error {
 	var previous os.FileInfo
 	for i := 0; i < attempts; i++ {
@@ -169,5 +144,5 @@ func WaitUntilStable(ctx context.Context, path string, attempts int, interval ti
 		case <-timer.C:
 		}
 	}
-	return errors.New("image did not stabilize before processing")
+	return ErrImageNotStable
 }

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -50,92 +51,129 @@ func (s *Store) Insights(ctx context.Context, now time.Time, location *time.Loca
 		return Insights{}, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT `+historyColumns+` FROM processed_images`)
+	rows, err := tx.QueryContext(ctx, `SELECT CAST(timestamp AS TEXT), originalName, newName, duration, isError FROM processed_images`)
 	if err != nil {
 		return Insights{}, err
 	}
-	records, err := readRecords(rows)
-	closeErr := rows.Close()
-	if err != nil {
+	defer rows.Close()
+	aggregate := newInsightsAccumulator(now, location)
+	for rows.Next() {
+		var raw, original, name string
+		var duration float64
+		var isError bool
+		if err := rows.Scan(&raw, &original, &name, &duration, &isError); err != nil {
+			return Insights{}, err
+		}
+		at, err := parseTimestamp(raw)
+		if err != nil {
+			return Insights{}, fmt.Errorf("history analytics: %w", err)
+		}
+		aggregate.add(at, original, name, duration, isError)
+	}
+	if err := rows.Err(); err != nil {
 		return Insights{}, err
 	}
-	if closeErr != nil {
-		return Insights{}, closeErr
-	}
-	result := ComputeInsights(records, now, location)
-	if err = tx.Commit(); err != nil {
+	if err := rows.Close(); err != nil {
 		return Insights{}, err
 	}
-	return result, nil
+	// Release the single database connection before sorting durations and rankings.
+	if err := tx.Commit(); err != nil {
+		return Insights{}, err
+	}
+	return aggregate.finish(), nil
 }
 
 // ComputeInsights applies timezone rules in Go so historical daylight-saving
 // offsets are independent of the host SQLite build's localtime implementation.
 func ComputeInsights(files []RecentFile, now time.Time, location *time.Location) Insights {
+	aggregate := newInsightsAccumulator(now, location)
+	for _, f := range files {
+		aggregate.add(f.Timestamp, f.OriginalName, f.NewName, f.Duration, f.IsError)
+	}
+	return aggregate.finish()
+}
+
+type insightsAccumulator struct {
+	now                         time.Time
+	location                    *time.Location
+	today, thisMonth, lastMonth string
+	result                      Insights
+	durations, todayDurations   []float64
+	types, nouns                map[string]int
+}
+
+func newInsightsAccumulator(now time.Time, location *time.Location) *insightsAccumulator {
 	if location == nil {
 		location = time.Local
 	}
 	now = now.In(location)
-	today := now.Format("2006-01-02")
-	thisMonth := now.Format("2006-01")
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, location)
-	lastMonth := monthStart.AddDate(0, -1, 0).Format("2006-01")
-	result := Insights{Daily: map[string]int{}, TopCategories: []Labeled{}, FileTypes: []Labeled{}}
-	var durations, todayDurations []float64
-	var names []string
-	types := map[string]int{}
-	for _, f := range files {
-		at := f.Timestamp.In(location)
-		day := at.Format("2006-01-02")
-		month := at.Format("2006-01")
-		result.TotalProcessed++
-		result.Daily[day]++
-		result.Hourly[at.Hour()]++
-		if month == thisMonth {
-			result.ThisMonth++
+	return &insightsAccumulator{
+		now:       now,
+		location:  location,
+		today:     now.Format("2006-01-02"),
+		thisMonth: now.Format("2006-01"),
+		lastMonth: monthStart.AddDate(0, -1, 0).Format("2006-01"),
+		result:    Insights{Daily: map[string]int{}, TopCategories: []Labeled{}, FileTypes: []Labeled{}},
+		types:     map[string]int{},
+		nouns:     map[string]int{},
+	}
+}
+func (a *insightsAccumulator) add(timestamp time.Time, original, name string, duration float64, isError bool) {
+	at := timestamp.In(a.location)
+	day, month := at.Format("2006-01-02"), at.Format("2006-01")
+	result := &a.result
+	result.TotalProcessed++
+	result.Daily[day]++
+	result.Hourly[at.Hour()]++
+	if month == a.thisMonth {
+		result.ThisMonth++
+	}
+	if month == a.lastMonth {
+		result.LastMonth++
+	}
+	if day == a.today {
+		result.TodayProcessed++
+	}
+	if isError {
+		result.Errors++
+		if day == a.today {
+			result.TodayErrors++
 		}
-		if month == lastMonth {
-			result.LastMonth++
+		return
+	}
+	result.Successes++
+	if day == a.today {
+		result.TodaySuccesses++
+	}
+	countNouns(a.nouns, name)
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(name), "."))
+	if ext == "" {
+		ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(original), "."))
+	}
+	if ext != "" {
+		a.types[ext]++
+	}
+	if duration > 0 {
+		a.durations = append(a.durations, duration)
+		if day == a.today {
+			a.todayDurations = append(a.todayDurations, duration)
 		}
-		if day == today {
-			result.TodayProcessed++
+		if result.Fastest == nil || duration < result.Fastest.Duration {
+			result.Fastest = &DurationRecord{name, duration}
 		}
-		if f.IsError {
-			result.Errors++
-			if day == today {
-				result.TodayErrors++
-			}
-			continue
-		}
-		result.Successes++
-		if day == today {
-			result.TodaySuccesses++
-		}
-		names = append(names, f.NewName)
-		ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(f.NewName), "."))
-		if ext == "" {
-			ext = strings.ToLower(strings.TrimPrefix(filepath.Ext(f.OriginalName), "."))
-		}
-		if ext != "" {
-			types[ext]++
-		}
-		if f.Duration > 0 {
-			durations = append(durations, f.Duration)
-			if day == today {
-				todayDurations = append(todayDurations, f.Duration)
-			}
-			if result.Fastest == nil || f.Duration < result.Fastest.Duration {
-				result.Fastest = &DurationRecord{f.NewName, f.Duration}
-			}
-			if result.Slowest == nil || f.Duration > result.Slowest.Duration {
-				result.Slowest = &DurationRecord{f.NewName, f.Duration}
-			}
+		if result.Slowest == nil || duration > result.Slowest.Duration {
+			result.Slowest = &DurationRecord{name, duration}
 		}
 	}
-	result.AvgDuration, result.P95Duration = DurationStats(durations)
-	result.TodayAvgDuration, result.TodayP95Duration = DurationStats(todayDurations)
-	result.TopCategories = TopNouns(names, 6)
-	result.FileTypes = ranked(types, 5)
+}
+func (a *insightsAccumulator) finish() Insights {
+	result := a.result
+	result.AvgDuration, result.P95Duration = ownedDurationStats(a.durations)
+	result.TodayAvgDuration, result.TodayP95Duration = ownedDurationStats(a.todayDurations)
+	result.TopCategories = ranked(a.nouns, 6)
+	result.FileTypes = ranked(a.types, 5)
+	now, location := a.now, a.location
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
 	if result.Daily[day.Format("2006-01-02")] == 0 {
 		day = day.AddDate(0, 0, -1)
@@ -168,11 +206,15 @@ func ComputeInsights(files []RecentFile, now time.Time, location *time.Location)
 	}
 	return result
 }
+
+// DurationStats leaves caller-owned observations in their original order.
 func DurationStats(values []float64) (float64, float64) {
-	if len(values) == 0 {
+	return ownedDurationStats(append([]float64(nil), values...))
+}
+func ownedDurationStats(ordered []float64) (float64, float64) {
+	if len(ordered) == 0 {
 		return 0, 0
 	}
-	ordered := append([]float64(nil), values...)
 	sort.Float64s(ordered)
 	sum := 0.0
 	for _, v := range ordered {

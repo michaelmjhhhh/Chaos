@@ -29,14 +29,23 @@ func Providers() []Provider {
 		{"ollama", "Ollama", "http://localhost:11434/v1", "qwen3-vl:2b", "Local vision model served by Ollama.", "", false, false},
 	}
 }
+
+// ProviderByID defaults an absent selection, but never aliases an unsupported ID.
 func ProviderByID(id string) Provider {
+	p, _ := lookupProvider(id)
+	return p
+}
+func lookupProvider(id string) (Provider, bool) {
 	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
+		return Providers()[0], true
+	}
 	for _, p := range Providers() {
 		if p.ID == id {
-			return p
+			return p, true
 		}
 	}
-	return Providers()[0]
+	return Provider{ID: id}, false
 }
 
 type Config struct {
@@ -58,15 +67,15 @@ type Config struct {
 }
 
 type ResolvedConfig struct {
-	Provider                                                                                                         Provider
-	APIKey, Model, BaseURL, WatchDir, OutputDir, Language, FilenameTemplate, SubfolderRule, Appearance, CustomPrompt string
-	CopyToClipboard, NotifyOnComplete                                                                                bool
+	Provider                                                                                             Provider
+	APIKey, Model, BaseURL, WatchDir, OutputDir, Language, FilenameTemplate, SubfolderRule, CustomPrompt string
+	CopyToClipboard, NotifyOnComplete                                                                    bool
 }
 
 func (c Config) Resolve(home string) ResolvedConfig {
 	c = c.withoutRetiredProvider()
 	p := ProviderByID(c.Provider)
-	r := ResolvedConfig{Provider: p, Model: strings.TrimSpace(c.Model), BaseURL: p.BaseURL, WatchDir: strings.TrimSpace(c.WatchDir), OutputDir: strings.TrimSpace(c.OutputDir), Language: strings.ToLower(strings.TrimSpace(c.Language)), FilenameTemplate: strings.TrimSpace(c.FilenameTemplate), SubfolderRule: c.SubfolderRule, Appearance: c.Appearance, CopyToClipboard: c.CopyToClipboard, NotifyOnComplete: c.NotifyOnComplete}
+	r := ResolvedConfig{Provider: p, Model: strings.TrimSpace(c.Model), BaseURL: p.BaseURL, WatchDir: strings.TrimSpace(c.WatchDir), OutputDir: strings.TrimSpace(c.OutputDir), Language: strings.ToLower(strings.TrimSpace(c.Language)), FilenameTemplate: strings.TrimSpace(c.FilenameTemplate), SubfolderRule: c.SubfolderRule, CopyToClipboard: c.CopyToClipboard, NotifyOnComplete: c.NotifyOnComplete}
 	if p.RequiresKey {
 		r.APIKey = strings.TrimSpace(c.APIKey)
 	}
@@ -93,9 +102,6 @@ func (c Config) Resolve(home string) ResolvedConfig {
 	if r.SubfolderRule != "day" && r.SubfolderRule != "month" {
 		r.SubfolderRule = "none"
 	}
-	if r.Appearance != "light" && r.Appearance != "dark" {
-		r.Appearance = "system"
-	}
 	if c.UseCustomPrompt {
 		r.CustomPrompt = strings.TrimSpace(c.CustomPrompt)
 	}
@@ -111,8 +117,8 @@ func expandHome(path, home string) string {
 	return filepath.Clean(path)
 }
 func (r ResolvedConfig) Validate() error {
-	if r.Provider.RequiresKey && strings.TrimSpace(r.APIKey) == "" {
-		return errors.New("API key not configured")
+	if err := r.validateProvider(); err != nil {
+		return err
 	}
 	if _, err := endpoint(r.BaseURL, "chat/completions"); err != nil {
 		return err
@@ -122,10 +128,24 @@ func (r ResolvedConfig) Validate() error {
 	}
 	return nil
 }
+
+// validateProvider also guards public network entry points, whose callers may
+// construct ResolvedConfig directly instead of using Resolve.
+func (r ResolvedConfig) validateProvider() error {
+	p, known := lookupProvider(r.Provider.ID)
+	if r.Provider.ID == "" || !known {
+		return ErrUnsupportedProvider
+	}
+	if p.RequiresKey && strings.TrimSpace(r.APIKey) == "" {
+		return ErrMissingAPIKey
+	}
+	return nil
+}
 func (c *Config) SetProvider(id string) {
 	*c = c.withoutRetiredProvider()
-	old := ProviderByID(c.Provider).ID
-	next := ProviderByID(id).ID
+	oldProvider, oldKnown := lookupProvider(c.Provider)
+	nextProvider, nextKnown := lookupProvider(id)
+	old, next := oldProvider.ID, nextProvider.ID
 	if old == next {
 		return
 	}
@@ -133,12 +153,15 @@ func (c *Config) SetProvider(id string) {
 	for k, v := range c.ProviderKeys {
 		keys[k] = v
 	}
-	if c.APIKey != "" {
+	if c.APIKey != "" && oldKnown {
 		keys[old] = c.APIKey
 	}
 	c.ProviderKeys = keys
 	c.Provider = next
-	c.APIKey = keys[next]
+	c.APIKey = ""
+	if nextKnown {
+		c.APIKey = keys[next]
+	}
 	c.Model = ""
 	c.BaseURL = ""
 }
@@ -232,7 +255,7 @@ func AtomicWrite(path string, data []byte, mode os.FileMode) error {
 func endpoint(base, suffix string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(base))
 	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return "", errors.New("invalid provider base URL")
+		return "", ErrInvalidBaseURL
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/" + suffix
 	return u.String(), nil
@@ -242,7 +265,7 @@ func endpoint(base, suffix string) (string, error) {
 func boundedRead(r io.Reader, limit int64) ([]byte, error) {
 	b, e := io.ReadAll(io.LimitReader(r, limit+1))
 	if e == nil && int64(len(b)) > limit {
-		e = errors.New("response exceeds size limit")
+		e = ErrResponseTooLarge
 	}
 	return b, e
 }

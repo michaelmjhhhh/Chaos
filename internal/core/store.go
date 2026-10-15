@@ -168,8 +168,18 @@ func (s *Store) importLegacy(path string) error {
 		if v.ID == "" || v.Timestamp == nil || math.IsNaN(*v.Timestamp) || math.IsInf(*v.Timestamp, 0) {
 			return errors.New("legacy history has invalid identity/date; original preserved")
 		}
-		seconds, fraction := math.Modf(*v.Timestamp + 978307200)
-		f := RecentFile{ID: v.ID, OriginalName: v.OriginalName, NewName: v.NewName, Path: v.Path, SourcePath: v.SourcePath, Timestamp: time.Unix(int64(seconds), int64(math.Round(fraction*1e9))).UTC(), Duration: v.Duration}
+		// Validate before conversion: float64-to-int64 overflow is not a date.
+		// The persisted four-digit year format and parser support years 0000–9999.
+		unix := *v.Timestamp + 978307200
+		if unix < -62167219200 || unix >= 253402300800 {
+			return errors.New("legacy history date is out of range; original preserved")
+		}
+		seconds, fraction := math.Modf(unix)
+		timestamp := time.Unix(int64(seconds), int64(math.Round(fraction*1e9))).UTC()
+		if timestamp.Year() < 0 || timestamp.Year() > 9999 {
+			return errors.New("legacy history date is out of range; original preserved")
+		}
+		f := RecentFile{ID: v.ID, OriginalName: v.OriginalName, NewName: v.NewName, Path: v.Path, SourcePath: v.SourcePath, Timestamp: timestamp, Duration: v.Duration}
 		var result map[string]json.RawMessage
 		if err = json.Unmarshal(v.Result, &result); err != nil {
 			return fmt.Errorf("invalid legacy result; original preserved: %w", err)

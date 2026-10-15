@@ -118,17 +118,20 @@ var stopWords = func() map[string]bool {
 func TopNouns(names []string, limit int) []Labeled {
 	counts := map[string]int{}
 	for _, name := range names {
-		stem := strings.TrimSuffix(name, filepath.Ext(name))
-		for _, t := range strings.FieldsFunc(strings.ToLower(stem), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {
-			if len([]rune(t)) < 3 || stopWords[t] {
-				continue
-			}
-			if strings.IndexFunc(t, unicode.IsLetter) >= 0 {
-				counts[t]++
-			}
-		}
+		countNouns(counts, name)
 	}
 	return ranked(counts, limit)
+}
+func countNouns(counts map[string]int, name string) {
+	stem := strings.TrimSuffix(name, filepath.Ext(name))
+	for _, t := range strings.FieldsFunc(strings.ToLower(stem), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {
+		if len([]rune(t)) < 3 || stopWords[t] {
+			continue
+		}
+		if strings.IndexFunc(t, unicode.IsLetter) >= 0 {
+			counts[t]++
+		}
+	}
 }
 func ranked(m map[string]int, limit int) []Labeled {
 	v := make([]Labeled, 0, len(m))

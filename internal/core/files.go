@@ -13,17 +13,15 @@ import (
 // MoveError records a published destination if removing the original or syncing
 // its directory fails. Callers can reconcile their durable journal on restart.
 type MoveError struct {
-	Source, Destination string
-	Err                 error
+	Destination string
+	Err         error
 }
 
 func (e *MoveError) Error() string {
 	return fmt.Sprintf("file was published at %s, but move did not finish: %v", e.Destination, e.Err)
 }
 func (e *MoveError) Unwrap() error { return e.Err }
-func MoveFile(source, dir, base string) (string, error) {
-	return MoveFileWithHook(source, dir, base, nil)
-}
+
 func MoveFileWithHook(source, dir, base string, before func(string) error) (string, error) {
 	ext := strings.ToLower(filepath.Ext(source))
 	if ext == "" {
@@ -31,16 +29,10 @@ func MoveFileWithHook(source, dir, base string, before func(string) error) (stri
 	}
 	return moveCandidates(source, dir, Sanitize(base), ext, before, false)
 }
-func RenameFile(path, base string) (string, error) { return RenameFileWithHook(path, base, nil) }
 func RenameFileWithHook(path, base string, before func(string) error) (string, error) {
 	return moveCandidates(path, filepath.Dir(path), Sanitize(base), filepath.Ext(path), before, true)
 }
-func MoveToWithHook(source, target string, before func(string) error) (string, error) {
-	return moveCandidates(source, filepath.Dir(target), strings.TrimSuffix(filepath.Base(target), filepath.Ext(target)), filepath.Ext(target), before, true)
-}
-func RevertFile(path, original string) (string, error) {
-	return RevertFileWithHook(path, original, nil)
-}
+
 func RevertFileWithHook(path, original string, before func(string) error) (string, error) {
 	if filepath.Clean(path) == filepath.Clean(original) {
 		return path, nil
@@ -162,7 +154,7 @@ func moveExact(source, destination string, before func(string) error) (string, e
 		return "", err
 	}
 	if err = syncDirectory(filepath.Dir(destination)); err != nil {
-		return destination, &MoveError{source, destination, err}
+		return destination, &MoveError{destination, err}
 	}
 	// A user or journal callback can replace the original while copying. Never
 	// unlink a different file that now happens to occupy the same pathname.
@@ -171,13 +163,13 @@ func moveExact(source, destination string, before func(string) error) (string, e
 		if err == nil {
 			err = errors.New("source changed before completing move; both files were preserved")
 		}
-		return destination, &MoveError{source, destination, err}
+		return destination, &MoveError{destination, err}
 	}
 	if err = os.Remove(source); err != nil {
-		return destination, &MoveError{source, destination, err}
+		return destination, &MoveError{destination, err}
 	}
 	if err = syncDirectory(filepath.Dir(source)); err != nil {
-		return destination, &MoveError{source, destination, err}
+		return destination, &MoveError{destination, err}
 	}
 	return destination, nil
 }
