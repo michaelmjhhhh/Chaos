@@ -137,7 +137,12 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 			LoadThumbnail: thumbnail,
 		}
 		view = desktop.New(controller, actions)
-		win = mygo.NewWindow(mygo.WindowOptions{Title: "Chaos", Width: 1000, Height: 780, MinWidth: 620, MinHeight: 560, Content: ui.View(view.View)})
+		options := mygo.WindowOptions{Title: "Chaos", Width: 1000, Height: 780, MinWidth: 620, MinHeight: 560, Content: ui.View(view.View)}
+		if runtime.GOOS == "darwin" {
+			// The sidebar runs up under the traffic lights, as in native Mac apps.
+			options.TitleBarStyle = mygo.TitleBarHidden
+		}
+		win = mygo.NewWindow(options)
 		win.OnClose(func(e *mygo.CloseEvent) {
 			if !drained.Load() {
 				e.PreventDefault()
