@@ -79,4 +79,5 @@ removed on config load/save; never carry its credentials or model to another pro
 - [Backend decisions](docs/migration/backend-audit.md)
 - [Validation and remaining platform limits](docs/migration/validation.md)
 
-`docs/superpowers/` records historical Swift designs, not current architecture.
+`docs/superpowers/` records dated implementation plans, including historical Swift
+designs. Use this guide and the migration references above for current architecture.

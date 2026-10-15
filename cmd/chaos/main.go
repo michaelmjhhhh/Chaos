@@ -81,6 +81,9 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 		if shuttingDown.Swap(true) {
 			return
 		}
+		if view != nil {
+			view.Close()
+		}
 		go func() {
 			if err := controller.Close(); err != nil {
 				log.Printf("close history: %v", err)
@@ -113,9 +116,8 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 					}
 				}()
 			},
-			Quit:            mygo.App.Quit,
-			ApplyAppearance: func(appearance string) { mygo.Theme.SetSource(mygo.ThemeSource(appearance)) },
-			ShowWindow:      show,
+			Quit:       mygo.App.Quit,
+			ShowWindow: show,
 			Dispatch: func(fn func()) {
 				if win != nil {
 					win.Update(fn)
@@ -209,6 +211,9 @@ func runDesktop(controller *app.Controller, initialFiles []string) {
 		}
 	})
 	if err := mygo.App.Run(); err != nil {
+		if view != nil {
+			view.Close()
+		}
 		_ = controller.Close()
 		log.Fatal(err)
 	}
@@ -258,7 +263,7 @@ func applicationMenu(c *app.Controller, d *desktop.Desktop, w *mygo.Window, show
 		{Role: mygo.RoleEditMenu},
 		{Label: "View", Submenu: []*mygo.MenuItem{{Label: "Dashboard", Accelerator: "CmdOrCtrl+1", Click: selectTab("Dashboard")}, {Label: "Pipeline", Accelerator: "CmdOrCtrl+2", Click: selectTab("Pipeline")}, {Label: "Insights", Accelerator: "CmdOrCtrl+3", Click: selectTab("Insights")}, {Role: mygo.RoleToggleFullScreen}}},
 		{Role: mygo.RoleWindowMenu},
-		{Label: "Help", Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{{Label: "Chaos Help", Accelerator: "CmdOrCtrl+Shift+/", Click: func(*mygo.MenuItem, *mygo.Window) { w.Update(d.ShowHelp); show() }}, {Label: "Replay Welcome Guide", Click: func(*mygo.MenuItem, *mygo.Window) { c.ReplayOnboarding(); w.Update(d.ShowWelcome); show() }}, {Label: "Chaos Website", Click: func(*mygo.MenuItem, *mygo.Window) {
+		{Label: "Help", Role: mygo.RoleHelp, Submenu: []*mygo.MenuItem{{Label: "Chaos Help", Accelerator: "CmdOrCtrl+Shift+/", Click: func(*mygo.MenuItem, *mygo.Window) { w.Update(d.ShowHelp); show() }}, {Label: "Replay Welcome Guide", Click: func(*mygo.MenuItem, *mygo.Window) { w.Update(d.ShowWelcome); show() }}, {Label: "Chaos Website", Click: func(*mygo.MenuItem, *mygo.Window) {
 			go mygo.Shell.OpenExternal("https://github.com/michaelmjhhhh/Chaos")
 		}}}},
 	})

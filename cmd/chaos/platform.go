@@ -34,8 +34,10 @@ func copyImage(path string) error {
 	return mygo.Clipboard.WriteImage(out.Bytes())
 }
 
-func thumbnail(path string) ([]byte, error) {
-	img, err := readImage(path)
+func thumbnail(ctx context.Context, path string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	img, err := core.DecodeImage(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +45,14 @@ func thumbnail(path string) ([]byte, error) {
 	scale := min(1.0, 640/float64(max(b.Dx(), b.Dy())))
 	out := image.NewNRGBA(image.Rect(0, 0, max(1, int(float64(b.Dx())*scale)), max(1, int(float64(b.Dy())*scale))))
 	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, draw.Src, nil)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var data bytes.Buffer
 	if err = png.Encode(&data, out); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return data.Bytes(), nil

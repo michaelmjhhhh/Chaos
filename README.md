@@ -163,6 +163,7 @@ make test                      # services, controller and native UI tests
 make race                      # concurrency checks
 make vet                       # static analysis
 ./package-dmg.sh               # signed .build/Chaos.dmg
+./scripts/package-preview-release.sh  # preview ZIP using the mygo.json version
 go run ./cmd/chaos --data-dir /tmp/chaos-preview  # isolated manual QA profile
 ```
 

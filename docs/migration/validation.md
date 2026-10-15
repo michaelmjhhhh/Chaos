@@ -1,26 +1,23 @@
-# Migration validation
+# Validation and migration evidence
 
-Baseline: `3209622034e03d25b3a53b0d4be06d1c245b88d7` (`origin/main` when the
-migration branch was created). The original **94 Swift tests passed** before the
-implementation was replaced. The new application is pinned to **MyGo v0.4.6** and
+Historical migration baseline: `3209622034e03d25b3a53b0d4be06d1c245b88d7`.
+The original **94 Swift tests passed** before that implementation was replaced.
+The current application is pinned to **MyGo v0.4.6** and
 Go 1.27.2; its framework review and native examples are linked in
 [mygo-audit.md](mygo-audit.md).
 
 ## Automated regression coverage
 
-Final local gates passed on 2026-10-13: **81 top-level Go tests** (plus nested
-cases) under the race detector, including real Redis; `go vet`; MyGo native
-`vet`; cgo-disabled native builds and Linux/Windows/macOS Intel cross-builds;
-signed app packaging; and `hdiutil verify` for the 13 MB DMG. The packaged
-`--version` reports `Chaos 1.1.0 (MyGo native)`.
-
-The Go suites exercise application behavior, not only compilation:
+The current Go suites cover the desktop application. The retired hosted service
+and its Redis tests are no longer part of the repository or the validation gates.
+The suites exercise these behaviors:
 
 - **Compatibility:** legacy snake_case config and defaults; per-provider key
-  isolation; Swift-epoch JSON import and archive failures; existing SQLite/GRDB
+  isolation and unknown-provider rejection; Swift-epoch JSON import, out-of-range
+  timestamps and archive failures; existing SQLite/GRDB
   schema and IDs; full history with a 500-row UI working set; local-date analytics,
-  streaks, percentiles, categories and time estimates; exact device hash and
-  Keychain fallback semantics.
+  streaks, percentiles, categories and time estimates; one-time legacy preferences
+  import through a fake command runner.
 - **Images and files:** screenshot guards and watcher baseline/stability; PNG,
   JPEG EXIF orientation, WebP, macOS HEIC; bounded decoding, alpha compositing and
   vision resize; Unicode/unsafe model output; filename templates and collisions;
@@ -28,23 +25,24 @@ The Go suites exercise application behavior, not only compilation:
   preparation/API work; exclusive publication and source preservation on failure;
   filesystem errors retain their details instead of being reported as network outages.
 - **Controller:** complete filing → rename → relaunch → undo; duplicate intake;
-  cancellation; rapid Stop/Start; undo under a running watcher with aliased folder
-  paths and subsequent filesystem identity reuse; stale health/usage responses;
+  cancellation; rapid Stop/Start and directory changes during startup/rebind;
+  retry of failed and missing files; undo under a running watcher with aliased folder
+  paths and subsequent filesystem identity reuse; stale health responses;
   appearance versus credential changes;
-  immutable snapshots; corrupt config preservation; crash journal recovery and
+  immutable snapshots; corrupt config preservation and independent persistence
+  error recovery; crash journal recovery and
   conflicting source/same-location safety; recovery rejects symlinks, directory
   aliases, shared file identities and replaced entries while retaining images and
   pending journals; clipboard failure remains durable success.
 - **Native views:** all main tabs in light/dark appearance; search and filters;
   keyboard focus and shortcuts; selection/open; rename/revert context actions;
   provider, prompt, template and appearance settings; onboarding; FAQ; error
-  recovery; tray actions/layout and constrained widths.
-- **Hosted API:** authentication, method/body validation, model pinning, bounded
-  upstream responses, error translation, administrative reset and origin headers.
-  Actual local Redis executes the production Lua for concurrent device/global
-  limits, UTC-month boundaries, rollback/idempotency and reset generations. A
-  global budget of one permits only one upstream call even when repeated timeout,
-  truncation or oversized-response failures refund the device allowance.
+  recovery and warning dismissal; tray actions and control bounds at constrained
+  widths; bounded thumbnail work, same-path replacement, stale completion and
+  shutdown cancellation. PNG artifact export also runs independently.
+- **Vision transport:** actual model, text and image payload contents; parsed
+  names; redirect rejection, bounded responses and in-flight cancellation using
+  local HTTP servers. These checks do not contact a real provider.
 
 Reproduce the principal checks:
 
@@ -59,10 +57,8 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags mygo_noinspector ./...
 hdiutil verify .build/Chaos.dmg
 ```
 
-Install Redis locally or set `REDIS_SERVER_BIN=/absolute/path/to/redis-server` to
-include Lua integration tests. Tests start an isolated process on a loopback port;
-they never connect to production Redis. CI installs Redis for the Linux job and
-runs the Go suites on macOS, Linux and Windows. Cross-compilation is a separate job.
+CI runs the Go suites on macOS, Linux and Windows. Cross-compilation is a separate
+job. No Redis installation or external provider credentials are needed.
 
 Native bitmap renders can be reproduced with:
 
@@ -70,7 +66,31 @@ Native bitmap renders can be reproduced with:
 CHAOS_UI_ARTIFACTS=/tmp/chaos-ui-artifacts go test -count=1 ./internal/desktop
 ```
 
-## Dependency security check
+## Cleanup validation — 2026-10-15
+
+Against audit baseline `9cb71b49b3b03840511cc2b83372dbe0327f826c`, local checks
+passed for all four Go packages with `-race -count=1`. `go vet`, MyGo native vet,
+Staticcheck v0.8.2, formatting, and the cgo-disabled production build also passed.
+Production cross-builds passed for Linux/amd64, Windows/amd64 and Darwin/amd64.
+The ad-hoc signed Apple Silicon app and DMG were rebuilt; `hdiutil verify` passed
+and the packaged executable reports `Chaos 1.1.0 (MyGo native)`.
+
+Thumbnail regressions use controlled completion and cancellation signals. Render
+smoke tests assert control bounds at 1000×800 and 600×720; standalone and shuffled
+exports into fresh directories passed. These are not pixel-perfect layout checks:
+the narrow Dashboard still has excess vertical spacing before Today.
+
+The history benchmark retains full-history statistics while scanning only fields
+needed by the accumulator. A 100,000-row run changed from about 101 ms / 131.6 MB
+allocated to 76 ms / 29.5 MB. These are local measurements, not a latency guarantee;
+reproduce with `go test -run '^$' -bench BenchmarkStoreInsights -benchmem ./internal/core`.
+The tests cover more than 500 records, DST boundaries, streaks and percentiles.
+
+The preview ZIP script was executed in an isolated fixture with controlled
+build/sign/archive commands. A mismatched explicit version failed before the
+build, and both omitted and matching versions used `mygo.json`.
+
+## Historical dependency security check — 2026-10-13
 
 On 2026-10-13, official `govulncheck` **v1.9.0** flagged ten standard-library
 advisories through the Go 1.27.1 call graph:
@@ -106,11 +126,11 @@ go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -tags=mygo_noinspector -show=ver
 This is a check against the current Go vulnerability database, not a guarantee
 against undisclosed issues or an audit of native OS libraries.
 
-## Packaged macOS checks
+## Historical packaged macOS checks — 2026-10-13
 
 The ad-hoc signed, cgo-disabled Apple Silicon `.app` was launched with an isolated
 `--data-dir`, synthetic image fixtures, and a local mock vision HTTP server. No
-production screenshots, settings, Keychain identity or hosted allowance were used.
+production screenshots or settings were used.
 
 Observed in the real native app:
 
@@ -148,8 +168,7 @@ exposed the expected control labels, secure key field and history actions.
   public native APIs without cgo. Unsupported nonempty ACL transfer fails safely.
 - The existing local config continues to contain API keys; it is written with
   owner-only permissions, not migrated into an encrypted credential vault.
-- The previously validated hosted Go service has since been removed, along with
-  its Redis tests and Vercel build configuration. The remaining `vercel.json`
-  disables automatic Git deployments.
 - The DMG is ad-hoc signed, not notarized. Release tags must match `mygo.json`;
-  MyGo's packaged metadata is the single source of the application version.
+  MyGo's packaged metadata is the single source of the application version. The
+  preview ZIP script derives its version from the same file and rejects a
+  conflicting explicit version before building.

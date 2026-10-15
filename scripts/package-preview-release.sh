@@ -3,7 +3,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-VERSION="${1:?usage: ./scripts/package-preview-release.sh <version>}"
+if [[ $# -gt 1 ]]; then
+  echo "usage: ./scripts/package-preview-release.sh [version]" >&2
+  exit 2
+fi
+VERSION="$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')"
+if [[ $# -eq 1 && "$1" != "$VERSION" ]]; then
+  echo "Preview version must match mygo.json: $VERSION" >&2
+  exit 1
+fi
 ARCH="$(uname -m)"
 DIST_DIR="dist"
 ARCHIVE="$DIST_DIR/Chaos-v$VERSION-$ARCH.zip"
