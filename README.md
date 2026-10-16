@@ -5,19 +5,15 @@
 <h1 align="center">Chaos</h1>
 
 <p align="center">
-  <strong>Turn a desktop full of anonymous screenshots into a searchable archive.</strong>
-</p>
-
-<p align="center">
-  A native macOS menu bar app that watches for screenshots, asks a vision model what they contain,<br>
-  and files them under useful names while you keep working.
+  <strong>Turn a desktop full of anonymous screenshots into a searchable archive.</strong><br>
+  A native macOS menu bar app that names and files your screenshots with a vision model.
 </p>
 
 <p align="center">
   <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple_Silicon-native-111111?style=flat-square&amp;logo=apple&amp;logoColor=white">
   <img alt="Go 1.27.2" src="https://img.shields.io/badge/Go-1.27.2-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white">
-  <img alt="MyGo native UI" src="https://img.shields.io/badge/MyGo-native_UI-111111?style=flat-square">
+  <img alt="MIT License" src="https://img.shields.io/badge/license-MIT-111111?style=flat-square">
 </p>
 
 <p align="center">
@@ -25,45 +21,47 @@
 </p>
 
 <p align="center">
-  <a href="docs/demo.mp4">
-    <img src="docs/demo-preview.png" alt="Watch the 29-second Chaos demo">
-  </a>
+  <a href="docs/demo.mp4"><img src="docs/demo-preview.png" alt="Watch the 29-second Chaos demo"></a><br>
+  <sub><a href="docs/demo.mp4">Watch the 29-second demo</a> · recorded on the previous Swift release; the workflow is unchanged.</sub>
 </p>
 
-<p align="center">
-  <strong><a href="docs/demo.mp4">Watch the 29-second demo →</a></strong>
-</p>
+---
 
-The recording shows the previous Swift release; this branch implements the same
-workflow with MyGo's native Go UI. Build from source to try the migrated app.
+## Contents
 
-## Your screenshots should not become a second inbox
+- [Features](#features)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Providers](#providers)
+- [How it works](#how-it-works)
+- [Data and privacy](#data-and-privacy)
+- [Development](#development)
+- [License](#license)
 
-Screenshots are effortless to capture and surprisingly painful to retrieve. A week later, the image you need is buried among dozens of files named with timestamps and nothing else.
+## Features
 
-Chaos quietly fixes that as the files arrive:
-
-- **Names screenshots by meaning** using your chosen vision model
-- **Files them automatically** into an output folder, with optional daily or monthly subfolders
-- **Accepts existing images** through drag and drop when your backlog needs attention
-- **Keeps a searchable local history** of recent processing, including failures and retries
-- **Stays out of the way** in the menu bar until you need it
+- **Names by meaning.** A vision model describes each screenshot; Chaos turns that into a short, Spotlight-friendly filename.
+- **Files automatically.** Renamed images land in your output folder, optionally grouped into daily or monthly subfolders.
+- **Filename templates.** Combine `{slug}`, `{date}` and `{time}` into a consistent format.
+- **Backlog intake.** Drop existing PNG, JPEG, HEIC or WebP files onto the dashboard to run them through the same flow.
+- **Rename, undo and retry.** Correct a name, restore a file to where it came from, or reprocess failures — without ever overwriting a file.
+- **Local history.** Full history is kept on disk; the latest 500 attempts are searchable in Pipeline.
+- **Insights.** Activity calendar, streaks, categories, file types, latency and time saved.
+- **Clipboard handoff.** Optionally copy the renamed image back to your clipboard.
+- **Stays out of the way.** Lives in the menu bar and only touches new screenshots.
 
 ## Install
 
-### Download the app (no Terminal needed)
+### Download
 
-1. Download the latest **[Chaos.dmg](https://github.com/michaelmjhhhh/Chaos/releases/latest/download/Chaos.dmg)** (or browse all [Releases](https://github.com/michaelmjhhhh/Chaos/releases/latest)).
-2. Open the DMG and drag **Chaos** into your **Applications** folder.
-3. The first time you open it, macOS shows a warning that it "could not verify"
-   the developer. This is expected — Chaos is open source and ad-hoc signed, but
-   not notarized by Apple. To open it once:
-   - Double-click **Chaos** (it gets blocked the first time — that's fine).
-   - Open **System Settings → Privacy & Security**, scroll to the bottom, and
-     click **Open Anyway** next to the message about Chaos.
-   - Click **Open** to confirm. You only do this once.
+1. Download **[Chaos.dmg](https://github.com/michaelmjhhhh/Chaos/releases/latest/download/Chaos.dmg)** (or browse [all releases](https://github.com/michaelmjhhhh/Chaos/releases)).
+2. Open the DMG and drag **Chaos** into **Applications**.
+3. Open Chaos once. macOS will block it because the app is ad-hoc signed but not notarized.
+4. Go to **System Settings → Privacy & Security**, click **Open Anyway** next to the Chaos message, then **Open**.
 
-### Homebrew (for developers)
+The **Open Anyway** step is only needed on first launch.
+
+### Homebrew
 
 ```bash
 brew tap michaelmjhhhh/chaos
@@ -71,59 +69,40 @@ brew install --cask chaos
 ```
 
 > [!NOTE]
-> Chaos supports Apple Silicon Macs running macOS 15 or later. Because it isn't
-> notarized by Apple, the one-time **Open Anyway** step above is needed on first
-> launch — it is not required again after that.
+> Chaos requires an Apple Silicon Mac running macOS 15 or later.
 
-## Start filing
+## Quick start
 
-1. Open **Settings** with `Cmd+,`.
-2. Choose a provider and enter an API key if it requires one.
-3. Pick the folder to watch and the folder where renamed images should land.
-4. Select **Start Watching** on the dashboard.
-5. Take a screenshot. Chaos names and files it automatically.
+1. Open **Settings** (`⌘,`).
+2. Choose a [provider](#providers) and enter an API key if it needs one.
+3. Pick the folder to watch and the folder where renamed images should go.
+4. Click **Start Watching** on the dashboard.
+5. Take a screenshot — Chaos names and files it.
 
-Need to clean up an existing image? Drop a PNG, JPEG, HEIC, or WebP onto the dashboard and it enters the same filing flow.
+## Providers
 
-## Built for the way screenshots accumulate
-
-| Capability | What it gives you |
-| --- | --- |
-| **AI-generated names** | Files you can recognize in Finder and find with Spotlight |
-| **Filename templates** | A consistent format using `{slug}`, `{date}`, and `{time}` |
-| **Automatic organization** | Optional day or month folders without manual sorting |
-| **Local history** | Unlimited durable history, with the latest 500 attempts searchable in Pipeline |
-| **Retry flow** | A quick way to reprocess failed images after fixing a provider or file issue |
-| **Rename and undo** | Correct an AI name, or restore its original location without overwriting files |
-| **Lifetime insights** | Activity calendar, streaks, categories, file types, performance and time saved |
-| **Clipboard handoff** | An option to copy the renamed image back to your clipboard |
-| **Screenshot guards** | Processing limited to new macOS screenshots when folder watching is active |
-| **Editorial dashboard** | Live progress, current-day filed/error counts, latency, and folder controls |
-
-## Bring your preferred model
-
-Chaos speaks the OpenAI-compatible vision API format, so you can choose the service that fits your workflow.
+Chaos uses the OpenAI-compatible vision API, so any of these work:
 
 | Provider | Default model | Base URL |
 | --- | --- | --- |
-| **SiliconRouter** | `gemini-3-flash-preview` | `https://api.siliconrouter.com/v1` |
-| **OpenAI** | `gpt-4o-mini` | `https://api.openai.com/v1` |
-| **DeepSeek** | `deepseek-v4-flash` | `https://api.deepseek.com` |
-| **OpenRouter** | `openai/gpt-4o-mini` | `https://openrouter.ai/api/v1` |
-| **OpenAI-Compatible** | `gpt-4o-mini` | You provide the URL |
-| **Ollama** | `qwen3-vl:2b` | `http://localhost:11434/v1` |
+| SiliconRouter | `gemini-3-flash-preview` | `https://api.siliconrouter.com/v1` |
+| OpenAI | `gpt-4o-mini` | `https://api.openai.com/v1` |
+| DeepSeek | `deepseek-v4-flash` | `https://api.deepseek.com` |
+| OpenRouter | `openai/gpt-4o-mini` | `https://openrouter.ai/api/v1` |
+| OpenAI-Compatible | `gpt-4o-mini` | your URL |
+| Ollama | `qwen3-vl:2b` | `http://localhost:11434/v1` |
 
-### Local Ollama
+Each provider keeps its own API key; keys are never sent to another provider.
 
-Chaos connects to Ollama as an optional local provider; it does not bundle or
-manage the Ollama runtime. Install and start Ollama separately, then pull the
-default lightweight vision model. `qwen3-vl` requires Ollama `0.12.7+`.
+### Running locally with Ollama
+
+Chaos does not bundle Ollama. Install and start it separately (`qwen3-vl` needs Ollama 0.12.7+), then:
 
 ```bash
 ollama pull qwen3-vl:2b
 ```
 
-Select **Ollama** in Chaos Settings. No API key is required.
+Select **Ollama** in Settings. No API key is required.
 
 ## How it works
 
@@ -131,79 +110,70 @@ Select **Ollama** in Chaos Settings. No API key is required.
 New screenshot
       │
       ▼
-Folder watcher ─── waits for stable new screenshots
+Watcher ────────── waits until a new screenshot is fully written
       │
       ▼
-Go vision client ─ asks your configured model for a short description
+Vision client ──── asks your model for a short description
       │
       ▼
-Slug sanitizer ── makes the result filesystem-safe
+Slug sanitizer ─── makes the description filesystem-safe
       │
       ▼
-Durable journal ─ applies your template, files without overwriting, and records history
+Journaled move ─── applies your template, files without overwriting, records history
 ```
 
-Existing files in the watched directory are ignored. Chaos only processes screenshots created after the watcher starts. Images you explicitly drop onto the dashboard bypass the screenshot filename guard and enter the same naming pipeline.
+Files already in the watched folder are ignored — only screenshots created after watching starts are processed. Images you drop onto the dashboard skip the screenshot-name check but follow the same pipeline.
 
-## Build from source
+## Data and privacy
+
+Everything lives in `~/Library/Application Support/chaos/`:
+
+| Path | Contents |
+| --- | --- |
+| `config.json` | Provider, API keys and filing settings (owner-only permissions) |
+| `preferences.json` | Onboarding and launch preferences |
+| `history.sqlite` | Processing history |
+| `pending/` | File-move journal, reconciled on launch after a crash |
+
+Images are sent only to the provider you configure. Chaos never overwrites an existing file and never removes a source that changed during processing.
+
+<details>
+<summary><strong>Upgrading from an older version</strong></summary>
+
+- Existing Swift installs keep their configuration, SQLite history and bundle ID (`com.chaos.app`).
+- Legacy `history.json` is imported with original timestamps and archived only after a successful import.
+- Legacy UserDefaults (onboarding, session number, start-on-launch) are imported once into `preferences.json`.
+- An existing `vibe-shot` CLI configuration is imported on first launch.
+- The hosted free trial has been retired. Saved trial selections reset to SiliconRouter with an empty key — choose a provider and enter your own key, or use Ollama. Other keys and settings are preserved.
+
+</details>
+
+## Development
+
+Chaos is written in Go with the [MyGo 0.4.6](https://github.com/egoist/mygo/tree/v0.4.6) native UI — no web frontend, JavaScript runtime, Swift or cgo. It needs Go 1.27.2 (fetched automatically by the Go toolchain).
 
 ```bash
-go test ./...
-./build-app.sh
-open .build/Chaos.app
+make dev            # live development
+make test           # unit, controller and native UI tests
+make race           # race detector
+make vet            # static analysis
+make build          # desktop executable
+./build-app.sh      # signed .build/Chaos.app
+./package-dmg.sh    # .build/Chaos.dmg
 ```
 
-Requires macOS 15 or later and Go 1.27.2. Go downloads the pinned toolchain
-automatically. The app uses [MyGo 0.4.6](https://github.com/egoist/mygo/tree/v0.4.6)
-native Go UI: no web frontend, JavaScript runtime, Swift application code, or cgo.
+Use an isolated profile for manual testing so your real settings and history stay untouched:
 
 ```bash
-make dev                       # MyGo native live development
-make test                      # services, controller and native UI tests
-make race                      # concurrency checks
-make vet                       # static analysis
-./package-dmg.sh               # signed .build/Chaos.dmg
-./scripts/package-preview-release.sh  # ZIP named from mygo.json and Go target
-go run ./cmd/chaos --data-dir /tmp/chaos-preview  # isolated manual QA profile
+go run ./cmd/chaos --data-dir /tmp/chaos-preview
 ```
 
-The isolated profile does not import your settings or alter your existing history.
+The source also builds for Linux and Windows, but macOS is the primary tested platform (HEIC conversion relies on macOS). More detail:
 
-The source also builds for Linux and Windows. macOS remains the primary tested
-desktop; HEIC conversion uses the built-in macOS image service. See the
-[framework audit](docs/migration/mygo-audit.md),
-[feature checklist](docs/migration/feature-parity.md), and
-[validation report](docs/migration/validation.md) for compatibility and test details.
-
-## Configuration
-
-Chaos stores its configuration at:
-
-```text
-~/Library/Application Support/chaos/config.json
-```
-
-On first launch, Chaos imports an existing `vibe-shot` CLI configuration when one is available.
-
-Existing Swift installations keep the same configuration, SQLite history, bundle
-identifier. Legacy `history.json` is imported with its
-original timestamps and archived only after a successful transaction. UserDefaults
-for onboarding, session number and start-on-launch are imported to `preferences.json`.
-
-The former Chaos hosted trial has been removed. Saved trial selections reset to
-SiliconRouter with an empty API key and default model. Choose a provider and enter
-your own key, or select local Ollama, before processing images. Other saved provider
-keys and filing settings are preserved. The hosted backend has been removed;
-`vercel.json` now disables automatic Git deployments.
-
-File changes are journaled under `pending/` and reconciled on launch after a crash.
-API keys are stored in the local configuration with owner-only permissions; switching
-providers keeps their keys separate. Processing is serialized and deduplicated.
-
-## Security
-
-Found a security issue? Please report it privately — see [SECURITY.md](SECURITY.md).
+- [Framework audit](docs/migration/mygo-audit.md)
+- [Feature parity](docs/migration/feature-parity.md)
+- [Validation report](docs/migration/validation.md)
 
 ## License
 
-Chaos is open source under the [MIT License](LICENSE).
+[MIT](LICENSE). To report a security issue privately, see [SECURITY.md](SECURITY.md).
