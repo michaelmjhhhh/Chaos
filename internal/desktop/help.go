@@ -132,7 +132,7 @@ func (d *Desktop) welcomeDialog(c *ui.Context) {
 			d.caption(c, welcomeSteps[step].name)
 		})
 		ui.Column(c.Key(fmt.Sprint("welcome-", step))).Gap(16).Transition(ui.ElementTransition{Animation: &glide, Enter: &ui.Motion{X: 14}}).Children(func() {
-			ui.Text(c, welcomeSteps[step].title).Font(serif).FontSize(25).Role(ui.RoleHeading).Level(1)
+			ui.Text(c, welcomeSteps[step].title).Font(serif).FontSize(28).Role(ui.RoleHeading).Level(1)
 			switch step {
 			case 0:
 				ui.Text(c, "Take a screenshot. Chaos reads it, writes a useful name, and files it away so you can find it again.").TextColor(p.text2).LineHeight(1.45)

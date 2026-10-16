@@ -98,7 +98,7 @@ func (d *Desktop) kpi(c *ui.Context, title, value, note string, more func()) {
 	d.card(ui.Column(c.Key("kpi-" + title))).Grow(1).Basis(0).MinWidth(200).Padding(16).Gap(10).Children(func() {
 		ui.Text(c, title).FontSize(12).FontWeight(500).TextColor(d.pal.text2)
 		ui.Column(c).Gap(2).Children(func() {
-			ui.Text(c, value).Font(serif).FontSize(32).FontFeatures("tnum").ContentTransition(ui.ContentTransition{Numeric: true})
+			ui.Text(c, value).Font(serif).FontSize(35).FontFeatures("tnum").ContentTransition(ui.ContentTransition{Numeric: true})
 			d.caption(c, note)
 		})
 		more()
@@ -119,7 +119,7 @@ func (d *Desktop) panel(c *ui.Context, title string, inRow bool, build func()) {
 
 func (d *Desktop) figure(c *ui.Context, value, label string) {
 	ui.Column(c.Key(label)).Grow(1).Basis(0).Gap(2).Children(func() {
-		ui.Text(c, value).Font(serif).FontSize(24).FontFeatures("tnum")
+		ui.Text(c, value).Font(serif).FontSize(26).FontFeatures("tnum")
 		d.caption(c, label)
 	})
 }

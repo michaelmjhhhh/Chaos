@@ -79,12 +79,6 @@ var (
 	glide = ui.Animation{Spring: ui.SpringOptions{Duration: 320 * time.Millisecond, Bounce: 0.12}}
 )
 
-// Type families. Serif is reserved for page titles and figures.
-const (
-	serif = "Georgia"
-	mono  = "monospace"
-)
-
 func (d *Desktop) theme(c *ui.Context) {
 	dark := c.Theme().Dark
 	switch d.config.Appearance {
@@ -104,7 +98,7 @@ func (d *Desktop) theme(c *ui.Context) {
 	if dark {
 		t = *ui.DarkTheme()
 	}
-	t.FontSize, t.Radius, t.Spacing = 13, 8, 4
+	t.FontSize, t.Radius, t.Spacing, t.Font = 13, 8, 4, sans
 	t.Background, t.Surface = p.canvas, p.card
 	t.SurfaceHover, t.SurfacePressed = p.card.Mix(p.ink, .04), p.card.Mix(p.ink, .08)
 	t.Text, t.TextMuted, t.Border = p.text, p.text2, p.border

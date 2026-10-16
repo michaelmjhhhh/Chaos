@@ -83,6 +83,7 @@ type Desktop struct {
 }
 
 func New(controller Controller, actions Actions) *Desktop {
+	registerFonts()
 	home, _ := os.UserHomeDir()
 	d := &Desktop{
 		controller: controller, actions: actions, home: home,
@@ -279,7 +280,7 @@ func (d *Desktop) sidebar(c *ui.Context, rail bool) {
 		} else {
 			brand.Padding(0, 4, 0, max(4, bar.Left-6)).Children(func() {
 				brandMark(c, 18, p.clay, p.clayPressed)
-				ui.Text(c, "Chaos").Font(serif).FontSize(17).SingleLine()
+				ui.Text(c, "Chaos").Font(serif).FontSize(18.5).SingleLine()
 			})
 		}
 		ui.Box(c).Height(8)
@@ -445,7 +446,7 @@ func (d *Desktop) header(c *ui.Context, key, eyebrow, title, subtitle string, ac
 				if eyebrow != "" {
 					d.caption(c, eyebrow)
 				}
-				ui.Text(c, title).Font(serif).FontSize(27).Role(ui.RoleHeading).Level(1).SingleLine().ContentTransition(ui.ContentTransition{})
+				ui.Text(c, title).Font(serif).FontSize(30).Role(ui.RoleHeading).Level(1).SingleLine().ContentTransition(ui.ContentTransition{})
 				if subtitle != "" {
 					ui.Text(c, subtitle).TextColor(p.text2)
 				}

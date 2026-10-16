@@ -141,7 +141,7 @@ func (d *Desktop) idle(c *ui.Context, dragging bool) {
 			if dragging {
 				title = "Release to organize."
 			}
-			ui.Text(c, title).Font(serif).FontSize(21).TextAlign(ui.Center).ContentTransition(ui.ContentTransition{})
+			ui.Text(c, title).Font(serif).FontSize(23).TextAlign(ui.Center).ContentTransition(ui.ContentTransition{})
 			ui.Text(c, "Start watching, then take a screenshot — or drop existing images here.").TextColor(p.text2).TextAlign(ui.Center).MaxWidth(380)
 		})
 		d.button(c, btn{label: "Organize Existing Screenshots", icon: icFolder, kind: secondary}).OnClick(d.pickImages)
@@ -369,7 +369,7 @@ func (d *Desktop) totals(c *ui.Context) {
 		ui.Row(c).Gap(24).Dividers(1, p.border).Children(func() {
 			stat := func(value, label string, tone ui.Color) {
 				ui.Column(c.Key(label)).Grow(1).Basis(0).Gap(2).Children(func() {
-					ui.Text(c, value).Font(serif).FontSize(26).TextColor(tone).FontFeatures("tnum").ContentTransition(ui.ContentTransition{Numeric: true})
+					ui.Text(c, value).Font(serif).FontSize(29).TextColor(tone).FontFeatures("tnum").ContentTransition(ui.ContentTransition{Numeric: true})
 					d.caption(c, label)
 				})
 			}
@@ -429,7 +429,7 @@ func (d *Desktop) TrayView(c *ui.Context) {
 		ui.Column(c).Padding(14, 14, 12, 14).Gap(10).BorderWidth(0, 0, 1, 0).BorderColor(p.border).Children(func() {
 			ui.Row(c).Gap(8).Children(func() {
 				brandMark(c, 18, p.clay, p.clayPressed)
-				ui.Text(c, "Chaos").Font(serif).FontSize(17).Grow(1)
+				ui.Text(c, "Chaos").Font(serif).FontSize(18.5).Grow(1)
 				b := btn{label: "Start", icon: icPlay, kind: primary, small: true}
 				if d.snapshot.Watching {
 					b = btn{label: "Stop", icon: icPause, kind: secondary, small: true}

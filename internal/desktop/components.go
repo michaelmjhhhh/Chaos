@@ -498,7 +498,7 @@ func (d *Desktop) emptyState(c *ui.Context, ic *ui.SVG, title, body string) {
 		ui.Row(c).Size(44, 44).Radius(12).Justify(ui.Center).Background(p.fill).Children(func() {
 			ui.Icon(c, ic).Size(20, 20).TextColor(p.text2)
 		})
-		ui.Text(c, title).Font(serif).FontSize(20).TextAlign(ui.Center)
+		ui.Text(c, title).Font(serif).FontSize(22).TextAlign(ui.Center)
 		if body != "" {
 			ui.Text(c, body).TextColor(p.text2).TextAlign(ui.Center).MaxWidth(340)
 		}
